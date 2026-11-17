@@ -1,11 +1,12 @@
-const VERSION = "0.3";
+const VERSION = "0.4";
 
 const CONFIG = {
   width: 1280,
   height: 720,
   player: { radius: 34, speed: 230, hp: 300, pickupRange: 70 },
-  sludge: { tank: 100, drainPerSec: 40, refillPerSec: 25, refillDelay: 0.6, minToFire: 20, length: 420, width: 46, dps: 70, push: 60 },
+  sludge: { tank: 100, drainPerSec: 100 / 3, refillPerSec: 25, refillDelay: 0.6, length: 420, width: 46, dps: 70, push: 60 },
   cleaner: { max: 5, cooldown: 1.2, radius: 11, speed: 210, launchSpeed: 520, launchTime: 0.22, hp: 40, damage: 12, attackInterval: 0.5, attackRange: 8, carryMax: 5, sightRange: 380, grabRange: 110 },
+  claw: { reach: 170, pickRange: 70, pullTime: 0.15, cooldown: 0.4, throwSpeed: 720, throwTime: 0.6, impactDamage: 45, impactRadius: 60, selfDamage: 45, stun: 0.6 },
   enemyAttackInterval: 0.8,
   enemies: {
     drone: { name: "소형 드론", radius: 13, speed: 120, hp: 30, damage: 10, scrap: 1, color: "#e0525a" },

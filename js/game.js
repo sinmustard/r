@@ -17,7 +17,9 @@ const MECH = {
   nozzle: 11,
   pipeLength: 48,
   chimney: [31, -20],
-  shutter: [0, 27]
+  shutter: [0, 27],
+  claw: [-60, 28],
+  clawShoulder: [-43, 4]
 };
 
 const SPRITES = {};
@@ -115,7 +117,7 @@ window.addEventListener("resize", resize);
 resize();
 
 const keys = new Set();
-const mouse = { x: W / 2, y: H / 2, down: false };
+const mouse = { x: W / 2, y: H / 2, spray: false };
 let state = "title";
 let overAt = 0;
 let game = newGame();
@@ -125,6 +127,8 @@ function newGame() {
     player: { x: W / 2, y: H / 2, r: CONFIG.player.radius, hp: CONFIG.player.hp, maxHp: CONFIG.player.hp, aim: 0, facing: 1, moving: false, flash: 0, walk: 0, smoke: 0 },
     tank: CONFIG.sludge.tank,
     tankLocked: false,
+    held: null,
+    clawCooldown: 0,
     refillWait: 0,
     beam: null,
     cleaners: [],
@@ -149,7 +153,7 @@ function newGame() {
 function startGame() {
   game = newGame();
   state = "play";
-  mouse.down = false;
+  mouse.spray = false;
 }
 
 function canRestart() {
@@ -160,7 +164,7 @@ function goTitle() {
   state = "title";
   titleView = "menu";
   titleIndex = 0;
-  mouse.down = false;
+  mouse.spray = false;
 }
 
 let titleView = "menu";
@@ -234,7 +238,7 @@ window.addEventListener("keydown", e => {
 window.addEventListener("keyup", e => keys.delete(e.code));
 window.addEventListener("blur", () => {
   keys.clear();
-  mouse.down = false;
+  mouse.spray = false;
   if (state === "play") state = "pause";
 });
 window.addEventListener("mousemove", e => {
@@ -244,6 +248,10 @@ window.addEventListener("mousemove", e => {
   canvas.style.cursor = state === "title" && titleHover() ? "pointer" : "crosshair";
 });
 window.addEventListener("mousedown", e => {
+  if (e.button === 2) {
+    if (state === "play") mouse.spray = true;
+    return;
+  }
   if (e.button !== 0) return;
   if (state === "title") {
     titleClick();
@@ -257,10 +265,10 @@ window.addEventListener("mousedown", e => {
     state = "play";
     return;
   }
-  mouse.down = true;
+  if (state === "play") useClaw();
 });
 window.addEventListener("mouseup", e => {
-  if (e.button === 0) mouse.down = false;
+  if (e.button === 2) mouse.spray = false;
 });
 window.addEventListener("contextmenu", e => e.preventDefault());
 
@@ -277,7 +285,7 @@ function onPress(code) {
   }
   if (code === "Escape" || code === "KeyP") {
     state = state === "play" ? "pause" : "play";
-    mouse.down = false;
+    mouse.spray = false;
     return;
   }
   if (state !== "play") return;
@@ -358,6 +366,107 @@ function ejectCleaner() {
   burst(door.x, door.y, "#e8b931", 6, 120);
 }
 
+function useClaw() {
+  const g = game;
+  const k = CONFIG.claw;
+  const p = g.player;
+  if (g.held) {
+    const e = g.held;
+    const a = Math.atan2(mouse.y - e.y, mouse.x - e.x);
+    e.held = false;
+    e.pull = 0;
+    e.thrown = { vx: Math.cos(a) * k.throwSpeed, vy: Math.sin(a) * k.throwSpeed, t: k.throwTime };
+    g.held = null;
+    g.clawCooldown = k.cooldown;
+    burst(e.x, e.y, "#e8b931", 6, 140);
+    return;
+  }
+  if (g.clawCooldown > 0) return;
+  let target = null;
+  let best = k.pickRange;
+  for (const e of g.enemies) {
+    if (e.dead || e.thrown || dist(e, p) > k.reach) continue;
+    const d = Math.hypot(e.x - mouse.x, e.y - mouse.y);
+    if (d < best) {
+      best = d;
+      target = e;
+    }
+  }
+  g.clawCooldown = k.cooldown;
+  if (!target) {
+    addText(p.x, p.y - 50, "잡을 적이 없음", "#9aa3ad");
+    return;
+  }
+  target.held = true;
+  target.pull = k.pullTime;
+  target.stun = 0;
+  g.held = target;
+  g.clawCooldown = 0;
+}
+
+function clawImpact(e) {
+  const g = game;
+  const k = CONFIG.claw;
+  e.thrown = null;
+  e.stun = k.stun;
+  damageEnemy(e, k.selfDamage);
+  for (const o of g.enemies) {
+    if (o === e || o.dead || o.held) continue;
+    const d = dist(o, e);
+    if (d <= k.impactRadius + o.r) {
+      damageEnemy(o, k.impactDamage);
+      o.stun = Math.max(o.stun || 0, k.stun);
+      if (d > 0) {
+        o.x += ((o.x - e.x) / d) * 24;
+        o.y += ((o.y - e.y) / d) * 24;
+      }
+    }
+  }
+  burst(e.x, e.y, "#cfd6e0", 18, 220);
+  burst(e.x, e.y, "#e8b931", 8, 160);
+  g.shake = Math.min(8, g.shake + 3);
+}
+
+function updateClaw(dt) {
+  const g = game;
+  const k = CONFIG.claw;
+  g.clawCooldown = Math.max(0, g.clawCooldown - dt);
+  const e = g.held;
+  if (e) {
+    const hold = mechPoint(g.player, MECH.claw[0], MECH.claw[1]);
+    if (e.pull > 0) {
+      e.pull -= dt;
+      moveToward(e, hold.x, hold.y, Math.max(dist(e, hold) / Math.max(e.pull, dt), 600) * dt);
+    } else {
+      e.x = hold.x;
+      e.y = hold.y;
+    }
+  }
+  for (const t of g.enemies) {
+    if (!t.thrown || t.dead) continue;
+    t.x += t.thrown.vx * dt;
+    t.y += t.thrown.vy * dt;
+    t.thrown.t -= dt;
+    t.angle += dt * 20;
+    let hit = t.x < t.r || t.x > W - t.r || t.y < t.r || t.y > H - t.r;
+    if (!hit) {
+      for (const o of g.enemies) {
+        if (o !== t && !o.dead && !o.held && !o.thrown && dist(o, t) < o.r + t.r) {
+          hit = true;
+          break;
+        }
+      }
+    }
+    t.x = clamp(t.x, t.r, W - t.r);
+    t.y = clamp(t.y, t.r, H - t.r);
+    if (hit) clawImpact(t);
+    else if (t.thrown.t <= 0) {
+      t.thrown = null;
+      t.stun = k.stun;
+    }
+  }
+}
+
 function recallCleaners() {
   for (const r of game.cleaners) r.mode = "return";
 }
@@ -391,6 +500,7 @@ function update(dt) {
   g.scrapPulse = Math.max(0, g.scrapPulse - dt);
   updateWaves(dt);
   updatePlayer(dt);
+  updateClaw(dt);
   updateSludge(dt);
   updateCleaners(dt);
   updateEnemies(dt);
@@ -461,8 +571,8 @@ function updateSludge(dt) {
   const g = game;
   const s = CONFIG.sludge;
   const p = g.player;
-  if (g.tankLocked && g.tank >= s.minToFire) g.tankLocked = false;
-  const firing = mouse.down && !g.tankLocked && g.tank > 0;
+  if (g.tankLocked && !mouse.spray) g.tankLocked = false;
+  const firing = mouse.spray && !g.tankLocked && g.tank > 0;
   if (!firing) {
     g.beam = null;
     if (g.refillWait > 0) g.refillWait -= dt;
@@ -483,8 +593,10 @@ function updateSludge(dt) {
   for (const e of g.enemies) {
     if (distToSegment(e.x, e.y, sx, sy, ex, ey) <= s.width / 2 + e.r) {
       damageEnemy(e, s.dps * dt);
-      e.x += cos * s.push * dt;
-      e.y += sin * s.push * dt;
+      if (!e.held) {
+        e.x += cos * s.push * dt;
+        e.y += sin * s.push * dt;
+      }
     }
   }
   for (let i = 0; i < 3; i++) {
@@ -524,7 +636,7 @@ function updateCleaners(dt) {
         return;
       }
     } else {
-      const enemy = nearest(g.enemies, r, c.sightRange);
+      const enemy = nearest(g.enemies.filter(e => !e.held && !e.thrown), r, c.sightRange);
       const nearScrap = r.carry < c.carryMax ? nearest(g.scraps, r, c.grabRange) : null;
       if (nearScrap && (!enemy || dist(r, enemy) > dist(r, nearScrap) + 40)) {
         tx = nearScrap.x;
@@ -581,6 +693,12 @@ function updateEnemies(dt) {
   const p = g.player;
   for (const e of g.enemies) {
     e.flash = Math.max(0, e.flash - dt);
+    if (e.held || e.thrown) continue;
+    if (e.stun > 0) {
+      e.stun -= dt;
+      e.angle += dt * 8;
+      continue;
+    }
     e.attackTimer -= dt;
     let target = p;
     let best = dist(e, p) - p.r;
@@ -600,8 +718,9 @@ function updateEnemies(dt) {
       hitTarget(target, e.damage);
     }
   }
-  separate(g.enemies, 0.5);
-  for (const e of g.enemies) pushOut(e, p);
+  const free = g.enemies.filter(e => !e.held && !e.thrown);
+  separate(free, 0.5);
+  for (const e of free) pushOut(e, p);
 }
 
 function updateScraps(dt) {
@@ -658,6 +777,7 @@ function cleanup() {
       burst(e.x, e.y, CONFIG.enemies[e.type].color, 14, 180);
     }
   }
+  if (g.held && g.held.dead) g.held = null;
   g.enemies = g.enemies.filter(e => !e.dead);
   g.cleaners = g.cleaners.filter(r => !r.dead);
   g.scraps = g.scraps.filter(s => !s.dead);
@@ -762,7 +882,7 @@ function drawCleaners() {
 }
 
 function drawEnemies() {
-  for (const e of game.enemies) drawEnemy(e);
+  for (const e of game.enemies) if (!e.held && !e.thrown) drawEnemy(e);
 }
 
 function drawEnemy(e) {
@@ -899,6 +1019,52 @@ function updateFacing(p) {
   else if (c < -0.2) p.facing = -1;
 }
 
+function drawClaw() {
+  const g = game;
+  for (const t of g.enemies) if (t.thrown) drawEnemy(t);
+  const e = g.held;
+  if (e) {
+    const sh = mechPoint(g.player, MECH.clawShoulder[0], MECH.clawShoulder[1]);
+    ctx.strokeStyle = "#1e1c21";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(sh.x, sh.y);
+    ctx.lineTo(e.x, e.y);
+    ctx.stroke();
+    ctx.strokeStyle = "#e8b931";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    drawEnemy(e);
+    ctx.strokeStyle = "#e8b931";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r + 5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (state === "play" && !e) {
+    const p = g.player;
+    let best = null;
+    let bd = CONFIG.claw.pickRange;
+    for (const t of g.enemies) {
+      if (t.thrown || dist(t, p) > CONFIG.claw.reach) continue;
+      const d = Math.hypot(t.x - mouse.x, t.y - mouse.y);
+      if (d < bd) {
+        bd = d;
+        best = t;
+      }
+    }
+    if (best && g.clawCooldown <= 0) {
+      ctx.strokeStyle = "rgba(232,185,49,0.7)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.arc(best.x, best.y, best.r + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+
 function drawParticles(list = game.particles) {
   for (const pt of list) {
     ctx.globalAlpha = clamp(pt.life / pt.max, 0, 1);
@@ -970,7 +1136,7 @@ function drawHud() {
   const p = g.player;
   const c = CONFIG.cleaner;
   drawBar(20, 20, 260, 22, p.hp / p.maxHp, p.hp / p.maxHp > 0.3 ? "#4caf6a" : "#e05252", "내구도", Math.ceil(p.hp) + " / " + p.maxHp);
-  drawBar(20, 50, 260, 16, g.tank / CONFIG.sludge.tank, g.tankLocked ? "#5b6170" : "#8fa832", g.tankLocked ? "폐수 탱크 (충전 중)" : "폐수 탱크", Math.floor(g.tank) + "%");
+  drawBar(20, 50, 260, 16, g.tank / CONFIG.sludge.tank, g.tank <= 0 || g.tankLocked ? "#5b6170" : "#8fa832", g.tankLocked ? "폐수 탱크 (버튼을 뗐다가 다시)" : "폐수 탱크", Math.floor(g.tank) + "%");
 
   ctx.textAlign = "right";
   ctx.textBaseline = "top";
@@ -985,9 +1151,10 @@ function drawHud() {
 
   const carrying = g.cleaners.reduce((n, r) => n + r.carry, 0);
   const y = H - 74;
-  drawSlot(20, y, "좌클릭", "오염 폐수 방출", "누르고 있으면 계속 발사", 0);
-  drawSlot(200, y, "Q", "청소 로봇 사출", "출동 " + g.cleaners.length + " / " + c.max, g.ejectCooldown / c.cooldown);
-  drawSlot(380, y, "R", "청소 로봇 회수", "수거 중인 고철 " + carrying + "개", 0);
+  drawSlot(20, y, "좌클릭", "집게팔", g.held ? "잡는 중 · 다시 클릭해 던지기" : "마우스 근처 적 잡기", g.clawCooldown / CONFIG.claw.cooldown);
+  drawSlot(200, y, "우클릭", "오염 폐수 방출", "누르고 있으면 계속 발사", 0);
+  drawSlot(380, y, "Q", "청소 로봇 사출", "출동 " + g.cleaners.length + " / " + c.max, g.ejectCooldown / c.cooldown);
+  drawSlot(560, y, "R", "청소 로봇 회수", "수거 중인 고철 " + carrying + "개", 0);
 
   ctx.textAlign = "right";
   ctx.textBaseline = "bottom";
@@ -1029,7 +1196,8 @@ function drawPrompt(text, y) {
 const CONTROLS = [
   ["WASD", "이동"],
   ["마우스", "조준"],
-  ["좌클릭 (누르고 있기)", "오염 폐수 방출"],
+  ["좌클릭", "집게팔 — 적 잡기, 다시 클릭해 던지기"],
+  ["우클릭 (누르고 있기)", "오염 폐수 방출"],
   ["Q", "청소 로봇 사출"],
   ["R", "청소 로봇 회수 (수거한 고철을 가져옴)"],
   ["Esc", "일시정지"]
@@ -1251,6 +1419,7 @@ function draw() {
   drawEnemies();
   drawBeam();
   drawPlayer();
+  drawClaw();
   drawParticles();
   drawTexts();
   ctx.restore();
