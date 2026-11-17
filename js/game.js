@@ -123,7 +123,76 @@ function startGame() {
 }
 
 function canRestart() {
-  return state === "title" || (state === "over" && performance.now() - overAt > 800);
+  return state === "over" && performance.now() - overAt > 800;
+}
+
+function goTitle() {
+  state = "title";
+  titleView = "menu";
+  titleIndex = 0;
+  mouse.down = false;
+}
+
+let titleView = "menu";
+let titleIndex = 0;
+const titleButtons = [
+  { label: "게임 시작", action: () => startGame() },
+  { label: "조작법", action: () => { titleView = "controls"; } }
+];
+const titleBack = { x: 120, y: 604, w: 220, h: 48 };
+const titleScene = {
+  t: 0,
+  scale: 2.4,
+  mech: { x: 860, y: 470, r: 34, aim: 0, flash: 0, walk: 0 },
+  drones: [],
+  particles: [],
+  spawn: 0,
+  fire: 1.5,
+  beam: null,
+  smoke: 0
+};
+
+function titleButtonRect(i) {
+  return { x: 120, y: 420 + i * 72, w: 300, h: 56 };
+}
+
+function inRect(r, x, y) {
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
+function titleHover() {
+  if (titleView === "controls") return inRect(titleBack, mouse.x, mouse.y);
+  for (let i = 0; i < titleButtons.length; i++) {
+    if (inRect(titleButtonRect(i), mouse.x, mouse.y)) {
+      titleIndex = i;
+      return true;
+    }
+  }
+  return false;
+}
+
+function titleClick() {
+  if (titleView === "controls") {
+    if (inRect(titleBack, mouse.x, mouse.y)) titleView = "menu";
+    return;
+  }
+  for (let i = 0; i < titleButtons.length; i++) {
+    if (inRect(titleButtonRect(i), mouse.x, mouse.y)) {
+      titleButtons[i].action();
+      return;
+    }
+  }
+}
+
+function titleKey(code) {
+  if (titleView === "controls") {
+    if (["Escape", "Space", "Enter", "Backspace"].includes(code)) titleView = "menu";
+    return;
+  }
+  const n = titleButtons.length;
+  if (code === "KeyW" || code === "ArrowUp") titleIndex = (titleIndex + n - 1) % n;
+  if (code === "KeyS" || code === "ArrowDown") titleIndex = (titleIndex + 1) % n;
+  if (code === "Space" || code === "Enter") titleButtons[titleIndex].action();
 }
 
 window.addEventListener("keydown", e => {
@@ -142,11 +211,16 @@ window.addEventListener("mousemove", e => {
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((e.clientX - rect.left) / rect.width) * W;
   mouse.y = ((e.clientY - rect.top) / rect.height) * H;
+  canvas.style.cursor = state === "title" && titleHover() ? "pointer" : "crosshair";
 });
 window.addEventListener("mousedown", e => {
   if (e.button !== 0) return;
-  if (canRestart()) {
-    startGame();
+  if (state === "title") {
+    titleClick();
+    return;
+  }
+  if (state === "over") {
+    if (canRestart()) startGame();
     return;
   }
   if (state === "pause") {
@@ -161,8 +235,14 @@ window.addEventListener("mouseup", e => {
 window.addEventListener("contextmenu", e => e.preventDefault());
 
 function onPress(code) {
-  if (state === "title" || state === "over") {
-    if ((code === "Space" || code === "Enter") && canRestart()) startGame();
+  if (state === "title") {
+    titleKey(code);
+    return;
+  }
+  if (state === "over") {
+    if (!canRestart()) return;
+    if (code === "Space" || code === "Enter") startGame();
+    if (code === "Escape") goTitle();
     return;
   }
   if (code === "Escape" || code === "KeyP") {
@@ -179,12 +259,12 @@ function addText(x, y, text, color) {
   game.texts.push({ x, y, text, color, life: 1 });
 }
 
-function burst(x, y, color, n, speed) {
+function burst(x, y, color, n, speed, list = game.particles) {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2;
     const v = speed * rand(0.3, 1);
     const life = rand(0.3, 0.7);
-    game.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life, max: life, color, size: rand(2, 5) });
+    list.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life, max: life, color, size: rand(2, 5) });
   }
 }
 
@@ -514,15 +594,19 @@ function updateScraps(dt) {
   }
 }
 
-function updateEffects(dt) {
+function updateParticles(list, dt) {
   const friction = Math.pow(0.05, dt);
-  for (const pt of game.particles) {
+  for (const pt of list) {
     pt.life -= dt;
     pt.x += pt.vx * dt;
     pt.y += pt.vy * dt;
     pt.vx *= friction;
     pt.vy *= friction;
   }
+}
+
+function updateEffects(dt) {
+  updateParticles(game.particles, dt);
   for (const t of game.texts) {
     t.life -= dt;
     t.y -= 30 * dt;
@@ -617,38 +701,40 @@ function drawCleaners() {
 }
 
 function drawEnemies() {
-  for (const e of game.enemies) {
-    const color = e.flash > 0 ? "#ffffff" : CONFIG.enemies[e.type].color;
-    ctx.save();
-    ctx.translate(e.x, e.y);
-    ctx.rotate(e.angle);
-    ctx.beginPath();
-    if (e.type === "drone") {
-      ctx.moveTo(e.r, 0);
-      ctx.lineTo(-e.r * 0.8, e.r * 0.8);
-      ctx.lineTo(-e.r * 0.4, 0);
-      ctx.lineTo(-e.r * 0.8, -e.r * 0.8);
-    } else {
-      for (let i = 0; i < 6; i++) {
-        const a = (i * Math.PI) / 3;
-        ctx.lineTo(Math.cos(a) * e.r, Math.sin(a) * e.r);
-      }
+  for (const e of game.enemies) drawEnemy(e);
+}
+
+function drawEnemy(e) {
+  const color = e.flash > 0 ? "#ffffff" : CONFIG.enemies[e.type].color;
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.rotate(e.angle);
+  ctx.beginPath();
+  if (e.type === "drone") {
+    ctx.moveTo(e.r, 0);
+    ctx.lineTo(-e.r * 0.8, e.r * 0.8);
+    ctx.lineTo(-e.r * 0.4, 0);
+    ctx.lineTo(-e.r * 0.8, -e.r * 0.8);
+  } else {
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI) / 3;
+      ctx.lineTo(Math.cos(a) * e.r, Math.sin(a) * e.r);
     }
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "#2a0f14";
-    ctx.stroke();
-    if (e.type === "guard") {
-      ctx.fillStyle = "#ffdf6b";
-      ctx.beginPath();
-      ctx.arc(e.r * 0.35, 0, e.r * 0.28, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-    if (e.hp < e.maxHp) drawHpBar(e.x, e.y - e.r - 9, e.r * 2, e.hp / e.maxHp);
   }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#2a0f14";
+  ctx.stroke();
+  if (e.type === "guard") {
+    ctx.fillStyle = "#ffdf6b";
+    ctx.beginPath();
+    ctx.arc(e.r * 0.35, 0, e.r * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  if (e.hp < e.maxHp) drawHpBar(e.x, e.y - e.r - 9, e.r * 2, e.hp / e.maxHp);
 }
 
 function strokeBeam(b, width, color, alpha) {
@@ -661,23 +747,21 @@ function strokeBeam(b, width, color, alpha) {
   ctx.stroke();
 }
 
-function drawBeam() {
-  const b = game.beam;
+function drawBeam(b = game.beam, w = CONFIG.sludge.width) {
   if (!b) return;
-  const w = CONFIG.sludge.width;
   ctx.save();
   ctx.lineCap = "round";
-  strokeBeam(b, w + Math.sin(game.time * 40) * 4, "#5d6b1f", 0.35);
+  strokeBeam(b, w + Math.sin(performance.now() / 25) * 4, "#5d6b1f", 0.35);
   strokeBeam(b, w * 0.6, "#8fa832", 0.85);
   strokeBeam(b, w * 0.22, "#c9de5c", 1);
   ctx.restore();
 }
 
-function drawPlayer() {
-  const p = game.player;
+function drawPlayer(p = game.player, scale = 1) {
   const body = p.flash > 0 ? "#ffffff" : "#e8b931";
   ctx.save();
   ctx.translate(p.x, p.y);
+  ctx.scale(scale, scale);
   const offset = (p.walk * 60) % 10;
   for (const side of [-1, 1]) {
     const x = side < 0 ? -38 : 26;
@@ -716,8 +800,8 @@ function drawPlayer() {
   ctx.restore();
 }
 
-function drawParticles() {
-  for (const pt of game.particles) {
+function drawParticles(list = game.particles) {
+  for (const pt of list) {
     ctx.globalAlpha = clamp(pt.life / pt.max, 0, 1);
     ctx.fillStyle = pt.color;
     ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
@@ -843,38 +927,186 @@ function drawPrompt(text, y) {
   ctx.globalAlpha = 1;
 }
 
-function drawTitle() {
-  drawOverlay();
+const CONTROLS = [
+  ["WASD", "이동"],
+  ["마우스", "조준"],
+  ["좌클릭 (누르고 있기)", "오염 폐수 방출"],
+  ["Q", "청소 로봇 사출"],
+  ["R", "청소 로봇 회수 (수거한 고철을 가져옴)"],
+  ["Esc", "일시정지"]
+];
+
+function updateTitle(dt) {
+  const s = titleScene;
+  const m = s.mech;
+  s.t += dt;
+  s.spawn -= dt;
+  if (s.spawn <= 0) {
+    s.spawn = rand(0.5, 1.1);
+    s.drones.push({ type: "drone", x: W + 20, y: rand(130, H - 150), r: 13, hp: 1, maxHp: 1, flash: 0, angle: Math.PI, speed: rand(50, 90), wobble: Math.random() * 6 });
+  }
+  for (const d of s.drones) {
+    d.x -= d.speed * dt;
+    d.y += Math.sin(s.t * 2 + d.wobble) * 20 * dt;
+  }
+  let target = null;
+  let best = Infinity;
+  for (const d of s.drones) {
+    const dd = dist(d, m);
+    if (d.x > m.x + 140 && dd < best) {
+      best = dd;
+      target = d;
+    }
+  }
+  if (target) {
+    const want = Math.atan2(target.y - m.y, target.x - m.x);
+    m.aim += (want - m.aim) * Math.min(1, dt * 4);
+  }
+  s.fire -= dt;
+  if (s.fire <= 0) s.fire = 2.4;
+  s.beam = null;
+  if (s.fire < 0.9 && target) {
+    const cos = Math.cos(m.aim);
+    const sin = Math.sin(m.aim);
+    const sx = m.x + cos * (m.r + 20) * s.scale;
+    const sy = m.y + sin * (m.r + 20) * s.scale;
+    s.beam = { sx, sy, ex: sx + cos * 560, ey: sy + sin * 560 };
+    for (const d of s.drones) {
+      if (!d.dead && distToSegment(d.x, d.y, s.beam.sx, s.beam.sy, s.beam.ex, s.beam.ey) < 44) {
+        d.dead = true;
+        burst(d.x, d.y, CONFIG.enemies.drone.color, 14, 180, s.particles);
+      }
+    }
+    for (let i = 0; i < 4; i++) {
+      const t = Math.random();
+      const side = rand(-1, 1) * 120;
+      const life = rand(0.2, 0.4);
+      s.particles.push({ x: sx + (s.beam.ex - sx) * t, y: sy + (s.beam.ey - sy) * t, vx: -sin * side + cos * 80, vy: cos * side + sin * 80, life, max: life, color: "#9fb83a", size: rand(3, 6) });
+    }
+  }
+  s.smoke -= dt;
+  if (s.smoke <= 0) {
+    s.smoke = 0.12;
+    const life = rand(1.2, 1.8);
+    s.particles.push({ x: m.x - 12 * s.scale, y: m.y + 12 * s.scale, vx: rand(-15, 15), vy: rand(-70, -45), life, max: life, color: "#6b707a", size: rand(8, 14) });
+  }
+  s.drones = s.drones.filter(d => !d.dead && d.x > -40);
+  updateParticles(s.particles, dt);
+  s.particles = s.particles.filter(pt => pt.life > 0);
+}
+
+function drawStripes(y, h) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, y, W, h);
+  ctx.clip();
   ctx.fillStyle = "#e8b931";
-  ctx.font = `900 88px ${FONT}`;
-  ctx.fillText("공장장", W / 2, 160);
-  ctx.fillStyle = "#9aa3ad";
+  ctx.fillRect(0, y, W, h);
+  ctx.fillStyle = "#171a20";
+  const off = (titleScene.t * 30) % 40;
+  for (let x = -40 - h + off; x < W + h; x += 40) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + h);
+    ctx.lineTo(x + 20, y + h);
+    ctx.lineTo(x + 20 + h, y);
+    ctx.lineTo(x + h, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTitleButton(r, label, selected) {
+  ctx.fillStyle = selected ? "#e8b931" : "rgba(23,26,32,0.85)";
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = selected ? "#e8b931" : "#3a3f4a";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(r.x, r.y, r.w, r.h);
+  ctx.fillStyle = selected ? "#171a20" : "#d7dce3";
+  ctx.font = `bold 22px ${FONT}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText((selected ? "▶  " : "    ") + label, r.x + 22, r.y + r.h / 2 + 1);
+}
+
+function drawTitle() {
+  const s = titleScene;
+  ctx.fillStyle = "#13161b";
+  ctx.fillRect(0, 0, W, H);
+  const off = (s.t * 20) % 40;
+  ctx.strokeStyle = "#1e2229";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = -off; x <= W; x += 40) {
+    ctx.moveTo(x + 0.5, 0);
+    ctx.lineTo(x + 0.5, H);
+  }
+  for (let y = 0; y <= H; y += 40) {
+    ctx.moveTo(0, y + 0.5);
+    ctx.lineTo(W, y + 0.5);
+  }
+  ctx.stroke();
+
+  for (const d of s.drones) drawEnemy(d);
+  drawBeam(s.beam, CONFIG.sludge.width * 1.6);
+  drawPlayer(s.mech, s.scale);
+  drawParticles(s.particles);
+
+  const shade = ctx.createLinearGradient(0, 0, 760, 0);
+  shade.addColorStop(0, "rgba(13,15,19,0.97)");
+  shade.addColorStop(0.6, "rgba(13,15,19,0.85)");
+  shade.addColorStop(1, "rgba(13,15,19,0)");
+  ctx.fillStyle = shade;
+  ctx.fillRect(0, 0, 760, H);
+
+  drawStripes(0, 14);
+  drawStripes(H - 14, 14);
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "#e8b931";
+  ctx.font = `bold 16px ${FONT}`;
+  ctx.fillText("중앙 AI 대응 프로젝트", 124, 150);
+  ctx.font = `900 120px ${FONT}`;
+  ctx.fillStyle = "#7a5f12";
+  ctx.fillText("공장장", 126, 268);
+  ctx.fillStyle = "#e8b931";
+  ctx.fillText("공장장", 120, 262);
   ctx.font = `20px ${FONT}`;
-  ctx.fillText("(가제)  v" + VERSION, W / 2, 222);
-  ctx.fillStyle = "#d7dce3";
+  ctx.fillStyle = "#9aa3ad";
+  ctx.fillText("(가제)", 500, 262);
   ctx.font = `18px ${FONT}`;
-  ctx.fillText("중앙 AI가 인간을 말살하려 한다. 쓰레기 처리공장이 거대 로봇으로 변신해 맞선다.", W / 2, 280);
-  const lines = [
-    ["WASD", "이동"],
-    ["마우스", "조준"],
-    ["좌클릭 (누르고 있기)", "오염 폐수 방출"],
-    ["Q", "청소 로봇 사출"],
-    ["R", "청소 로봇 회수 (수거한 고철을 가져옴)"],
-    ["Esc", "일시정지"]
-  ];
-  lines.forEach(([key, desc], i) => {
-    const y = 350 + i * 32;
-    ctx.font = `bold 17px ${FONT}`;
-    ctx.fillStyle = "#e8b931";
-    ctx.textAlign = "right";
-    ctx.fillText(key, W / 2 - 16, y);
-    ctx.font = `17px ${FONT}`;
-    ctx.fillStyle = "#d7dce3";
-    ctx.textAlign = "left";
-    ctx.fillText(desc, W / 2 + 16, y);
-  });
-  ctx.textAlign = "center";
-  drawPrompt("클릭하거나 스페이스를 눌러 시작", 610);
+  ctx.fillStyle = "#d7dce3";
+  ctx.fillText("중앙 AI가 인간을 말살하려 한다.", 124, 318);
+  ctx.fillText("쓰레기 처리공장이 거대 로봇으로 변신해 맞선다.", 124, 346);
+
+  if (titleView === "menu") {
+    titleButtons.forEach((b, i) => drawTitleButton(titleButtonRect(i), b.label, i === titleIndex));
+  } else {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold 22px ${FONT}`;
+    ctx.textBaseline = "middle";
+    ctx.fillText("조작법", 124, 404);
+    CONTROLS.forEach(([key, desc], i) => {
+      const y = 444 + i * 26;
+      ctx.font = `bold 16px ${FONT}`;
+      ctx.fillStyle = "#e8b931";
+      ctx.fillText(key, 124, y);
+      ctx.font = `16px ${FONT}`;
+      ctx.fillStyle = "#d7dce3";
+      ctx.fillText(desc, 320, y);
+    });
+    drawTitleButton(titleBack, "돌아가기", true);
+  }
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.font = `13px ${FONT}`;
+  ctx.fillStyle = "#6b717c";
+  const hint = titleView === "menu" ? "W/S 또는 마우스로 고르고, 스페이스나 클릭으로 결정" : "Esc 또는 스페이스로 돌아가기";
+  ctx.fillText(hint, 124, H - 40);
+  ctx.textAlign = "right";
+  ctx.fillText("v" + VERSION, W - 24, H - 40);
 }
 
 function drawGameOver() {
@@ -886,7 +1118,12 @@ function drawGameOver() {
   ctx.fillStyle = "#d7dce3";
   ctx.font = `20px ${FONT}`;
   ctx.fillText("웨이브 " + g.wave + "  ·  처치 " + g.kills + "  ·  고철 " + g.scrap, W / 2, 330);
-  if (canRestart()) drawPrompt("클릭하거나 스페이스를 눌러 다시 시작", 430);
+  if (canRestart()) {
+    drawPrompt("클릭하거나 스페이스를 눌러 다시 시작", 430);
+    ctx.font = `15px ${FONT}`;
+    ctx.fillStyle = "#9aa3ad";
+    ctx.fillText("Esc를 누르면 시작 화면으로", W / 2, 474);
+  }
 }
 
 function drawPause() {
@@ -900,6 +1137,10 @@ function drawPause() {
 function draw() {
   const g = game;
   ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  if (state === "title") {
+    drawTitle();
+    return;
+  }
   ctx.save();
   if (state === "play" && g.shake > 0) ctx.translate(rand(-1, 1) * g.shake, rand(-1, 1) * g.shake);
   drawFloor();
@@ -911,9 +1152,8 @@ function draw() {
   drawParticles();
   drawTexts();
   ctx.restore();
-  if (state !== "title") drawHud();
-  if (state === "title") drawTitle();
-  else if (state === "pause") drawPause();
+  drawHud();
+  if (state === "pause") drawPause();
   else if (state === "over") drawGameOver();
 }
 
@@ -922,6 +1162,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (state === "play") update(dt);
+  else if (state === "title") updateTitle(dt);
   draw();
   requestAnimationFrame(frame);
 }
