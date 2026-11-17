@@ -129,6 +129,17 @@ function newGame() {
     tankLocked: false,
     held: null,
     clawCooldown: 0,
+    cubes: [],
+    mines: [],
+    rings: [],
+    cubeCooldown: 0,
+    mineCooldown: 0,
+    boost: 0,
+    boostCooldown: 0,
+    overclock: 0,
+    recoil: 0,
+    overclockCooldown: 0,
+    cartridges: newCartridges(),
     refillWait: 0,
     beam: null,
     cleaners: [],
@@ -291,6 +302,10 @@ function onPress(code) {
   if (state !== "play") return;
   if (code === "KeyQ") ejectCleaner();
   if (code === "KeyR") recallCleaners();
+  if (code === "KeyE") placeMine();
+  if (code === "KeyF") compressScrap();
+  if (code === "ShiftLeft" || code === "ShiftRight") startBoost();
+  if (code === "Space") startOverclock();
 }
 
 function addText(x, y, text, color) {
@@ -344,6 +359,7 @@ function ejectCleaner() {
   const c = CONFIG.cleaner;
   const p = g.player;
   if (g.ejectCooldown > 0 || g.cleaners.length >= c.max) return;
+  const hp = c.hp * mm("cleaner", "summonHp");
   const a = p.aim;
   const door = mechPoint(p, MECH.shutter[0], MECH.shutter[1]);
   g.cleaners.push({
@@ -353,8 +369,8 @@ function ejectCleaner() {
     vx: Math.cos(a) * c.launchSpeed,
     vy: Math.sin(a) * c.launchSpeed,
     launch: c.launchTime,
-    hp: c.hp,
-    maxHp: c.hp,
+    hp,
+    maxHp: hp,
     carry: 0,
     mode: "work",
     attackTimer: 0,
@@ -362,7 +378,7 @@ function ejectCleaner() {
     flash: 0,
     angle: a
   });
-  g.ejectCooldown = c.cooldown;
+  g.ejectCooldown = c.cooldown * mm("cleaner", "cooldown");
   burst(door.x, door.y, "#e8b931", 6, 120);
 }
 
@@ -377,22 +393,13 @@ function useClaw() {
     e.pull = 0;
     e.thrown = { vx: Math.cos(a) * k.throwSpeed, vy: Math.sin(a) * k.throwSpeed, t: k.throwTime };
     g.held = null;
-    g.clawCooldown = k.cooldown;
+    g.clawCooldown = k.cooldown * mm("claw", "cooldown");
     burst(e.x, e.y, "#e8b931", 6, 140);
     return;
   }
   if (g.clawCooldown > 0) return;
-  let target = null;
-  let best = k.pickRange;
-  for (const e of g.enemies) {
-    if (e.dead || e.thrown || dist(e, p) > k.reach) continue;
-    const d = Math.hypot(e.x - mouse.x, e.y - mouse.y);
-    if (d < best) {
-      best = d;
-      target = e;
-    }
-  }
-  g.clawCooldown = k.cooldown;
+  const target = clawTarget();
+  g.clawCooldown = k.cooldown * mm("claw", "cooldown");
   if (!target) {
     addText(p.x, p.y - 50, "잡을 적이 없음", "#9aa3ad");
     return;
@@ -404,18 +411,38 @@ function useClaw() {
   g.clawCooldown = 0;
 }
 
+function clawTarget() {
+  const g = game;
+  const k = CONFIG.claw;
+  const p = g.player;
+  const reach = k.reach * mm("claw", "range");
+  let target = null;
+  let best = k.pickRange;
+  for (const e of g.enemies.concat(g.cubes)) {
+    if (e.dead || e.thrown || e.held || dist(e, p) > reach) continue;
+    const d = Math.hypot(e.x - mouse.x, e.y - mouse.y);
+    if (d < best) {
+      best = d;
+      target = e;
+    }
+  }
+  return target;
+}
+
 function clawImpact(e) {
   const g = game;
   const k = CONFIG.claw;
+  const dmg = mm("claw", "damage") * ocMul();
+  const stun = k.stun * mm("claw", "duration");
   e.thrown = null;
-  e.stun = k.stun;
-  damageEnemy(e, k.selfDamage);
+  e.stun = stun;
+  damageEnemy(e, k.selfDamage * dmg);
   for (const o of g.enemies) {
     if (o === e || o.dead || o.held) continue;
     const d = dist(o, e);
-    if (d <= k.impactRadius + o.r) {
-      damageEnemy(o, k.impactDamage);
-      o.stun = Math.max(o.stun || 0, k.stun);
+    if (d <= k.impactRadius * mm("claw", "range") + o.r) {
+      damageEnemy(o, k.impactDamage * dmg);
+      o.stun = Math.max(o.stun || 0, stun);
       if (d > 0) {
         o.x += ((o.x - e.x) / d) * 24;
         o.y += ((o.y - e.y) / d) * 24;
@@ -442,7 +469,7 @@ function updateClaw(dt) {
       e.y = hold.y;
     }
   }
-  for (const t of g.enemies) {
+  for (const t of g.enemies.concat(g.cubes)) {
     if (!t.thrown || t.dead) continue;
     t.x += t.thrown.vx * dt;
     t.y += t.thrown.vy * dt;
@@ -459,7 +486,8 @@ function updateClaw(dt) {
     }
     t.x = clamp(t.x, t.r, W - t.r);
     t.y = clamp(t.y, t.r, H - t.r);
-    if (hit) clawImpact(t);
+    if (t.kind === "cube" && (hit || t.thrown.t <= 0)) cubeImpact(t);
+    else if (hit) clawImpact(t);
     else if (t.thrown.t <= 0) {
       t.thrown = null;
       t.stun = k.stun;
@@ -478,6 +506,11 @@ function hitTarget(t, dmg) {
   if (t === g.player) {
     g.shake = Math.min(8, g.shake + 4);
     burst(t.x, t.y, "#ffb347", 6, 140);
+  } else if (t.kind === "cube") {
+    if (t.hp <= 0 && !t.dead) {
+      t.dead = true;
+      burst(t.x, t.y, "#9aa3ad", 14, 160);
+    }
   } else if (t.hp <= 0 && !t.dead) {
     t.dead = true;
     dropScrap(t.x, t.y, t.carry);
@@ -501,6 +534,7 @@ function update(dt) {
   updateWaves(dt);
   updatePlayer(dt);
   updateClaw(dt);
+  updateSkills(dt);
   updateSludge(dt);
   updateCleaners(dt);
   updateEnemies(dt);
@@ -549,8 +583,8 @@ function updatePlayer(dt) {
   const len = Math.hypot(dx, dy);
   p.moving = len > 0;
   if (p.moving) {
-    p.x += (dx / len) * c.speed * dt;
-    p.y += (dy / len) * c.speed * dt;
+    p.x += (dx / len) * c.speed * ocMul() * dt;
+    p.y += (dy / len) * c.speed * ocMul() * dt;
     p.walk += dt;
   }
   p.x = clamp(p.x, p.r, W - p.r);
@@ -576,23 +610,25 @@ function updateSludge(dt) {
   if (!firing) {
     g.beam = null;
     if (g.refillWait > 0) g.refillWait -= dt;
-    else g.tank = Math.min(s.tank, g.tank + s.refillPerSec * dt);
+    else g.tank = Math.min(s.tank, g.tank + (s.refillPerSec / mm("sludge", "cooldown")) * ocMul() * dt);
     return;
   }
-  g.tank = Math.max(0, g.tank - s.drainPerSec * dt);
-  g.refillWait = s.refillDelay;
+  g.tank = Math.max(0, g.tank - s.drainPerSec * mm("sludge", "cost") * dt);
+  g.refillWait = s.refillDelay * mm("sludge", "cooldown");
   if (g.tank <= 0) g.tankLocked = true;
   const cos = Math.cos(p.aim);
   const sin = Math.sin(p.aim);
   const nozzle = mechNozzle(p);
   const sx = nozzle.x;
   const sy = nozzle.y;
-  const ex = sx + cos * s.length;
-  const ey = sy + sin * s.length;
-  g.beam = { sx, sy, ex, ey };
+  const reach = mm("sludge", "range");
+  const width = s.width * reach;
+  const ex = sx + cos * s.length * reach;
+  const ey = sy + sin * s.length * reach;
+  g.beam = { sx, sy, ex, ey, w: width };
   for (const e of g.enemies) {
-    if (distToSegment(e.x, e.y, sx, sy, ex, ey) <= s.width / 2 + e.r) {
-      damageEnemy(e, s.dps * dt);
+    if (distToSegment(e.x, e.y, sx, sy, ex, ey) <= width / 2 + e.r) {
+      damageEnemy(e, s.dps * mm("sludge", "damage") * ocMul() * dt);
       if (!e.held) {
         e.x += cos * s.push * dt;
         e.y += sin * s.push * dt;
@@ -611,6 +647,13 @@ function updateCleaners(dt) {
   const g = game;
   const c = CONFIG.cleaner;
   const p = g.player;
+  const boosted = g.boost > 0;
+  const quick = boosted ? CONFIG.boost.speedMul : 1;
+  const speed = c.speed * quick;
+  const interval = c.attackInterval / quick;
+  const damage = c.damage * mm("cleaner", "damage") * (boosted ? mm("boost", "damage") : 1);
+  const sight = c.sightRange * mm("cleaner", "range");
+  const reach = c.attackRange * mm("cleaner", "range");
   g.cleaners.forEach((r, i) => {
     r.flash = Math.max(0, r.flash - dt);
     r.bump = Math.max(0, r.bump - dt);
@@ -636,17 +679,17 @@ function updateCleaners(dt) {
         return;
       }
     } else {
-      const enemy = nearest(g.enemies.filter(e => !e.held && !e.thrown), r, c.sightRange);
+      const enemy = nearest(g.enemies.filter(e => !e.held && !e.thrown), r, sight);
       const nearScrap = r.carry < c.carryMax ? nearest(g.scraps, r, c.grabRange) : null;
       if (nearScrap && (!enemy || dist(r, enemy) > dist(r, nearScrap) + 40)) {
         tx = nearScrap.x;
         ty = nearScrap.y;
       } else if (enemy) {
         r.angle = Math.atan2(enemy.y - r.y, enemy.x - r.x);
-        if (dist(r, enemy) <= enemy.r + r.r + c.attackRange) {
+        if (dist(r, enemy) <= enemy.r + r.r + reach) {
           if (r.attackTimer <= 0) {
-            damageEnemy(enemy, c.damage);
-            r.attackTimer = c.attackInterval;
+            damageEnemy(enemy, damage);
+            r.attackTimer = interval;
             r.bump = 0.12;
             burst(enemy.x, enemy.y, "#e8f0f2", 3, 90);
           }
@@ -655,7 +698,7 @@ function updateCleaners(dt) {
           ty = enemy.y;
         }
       } else {
-        const s = r.carry < c.carryMax ? nearest(g.scraps, r, c.sightRange) : null;
+        const s = r.carry < c.carryMax ? nearest(g.scraps, r, sight) : null;
         if (s) {
           tx = s.x;
           ty = s.y;
@@ -668,7 +711,7 @@ function updateCleaners(dt) {
     }
     if (tx !== null) {
       r.angle = Math.atan2(ty - r.y, tx - r.x);
-      moveToward(r, tx, ty, c.speed * dt);
+      moveToward(r, tx, ty, speed * dt);
     }
     if (r.carry < c.carryMax) {
       for (const s of g.scraps) {
@@ -702,8 +745,8 @@ function updateEnemies(dt) {
     e.attackTimer -= dt;
     let target = p;
     let best = dist(e, p) - p.r;
-    for (const r of g.cleaners) {
-      if (r.launch > 0 || r.dead) continue;
+    for (const r of g.cleaners.concat(g.cubes)) {
+      if (r.launch > 0 || r.dead || r.held || r.thrown) continue;
       const d = dist(e, r) - r.r;
       if (d < best) {
         best = d;
@@ -720,7 +763,10 @@ function updateEnemies(dt) {
   }
   const free = g.enemies.filter(e => !e.held && !e.thrown);
   separate(free, 0.5);
-  for (const e of free) pushOut(e, p);
+  for (const e of free) {
+    pushOut(e, p);
+    for (const c of g.cubes) if (!c.held && !c.thrown && !c.dead) pushOut(e, c);
+  }
 }
 
 function updateScraps(dt) {
@@ -778,6 +824,7 @@ function cleanup() {
     }
   }
   if (g.held && g.held.dead) g.held = null;
+  cleanupSkills();
   g.enemies = g.enemies.filter(e => !e.dead);
   g.cleaners = g.cleaners.filter(r => !r.dead);
   g.scraps = g.scraps.filter(s => !s.dead);
@@ -854,6 +901,13 @@ function drawCleaners() {
       ctx.stroke();
       ctx.restore();
     }
+    if (game.boost > 0) {
+      ctx.strokeStyle = "rgba(95,240,200,0.6)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, r.r + 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.beginPath();
     ctx.arc(0, 0, r.r, 0, Math.PI * 2);
     ctx.fillStyle = r.flash > 0 ? "#ffffff" : "#b9b2bd";
@@ -928,7 +982,7 @@ function strokeBeam(b, width, color, alpha) {
   ctx.stroke();
 }
 
-function drawBeam(b = game.beam, w = CONFIG.sludge.width) {
+function drawBeam(b = game.beam, w = (b && b.w) || CONFIG.sludge.width) {
   if (!b) return;
   ctx.save();
   ctx.lineCap = "round";
@@ -989,13 +1043,21 @@ function drawPlayer(p = game.player, scale = 1) {
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.scale(scale * f, scale);
+  const hot = p === game.player && state !== "title" ? game.overclock > 0 : false;
+  const cold = p === game.player && state !== "title" ? game.recoil > 0 : false;
+  if (hot) {
+    ctx.shadowColor = "rgba(255,140,40,0.95)";
+    ctx.shadowBlur = 18 + Math.sin(performance.now() / 60) * 6;
+  }
   if (p.flash > 0) ctx.filter = "brightness(2.5)";
+  else if (cold) ctx.filter = "grayscale(0.8) brightness(0.8)";
   for (const [img, leg, dy] of [[SPRITES.legLeft, MECH.legLeft, step], [SPRITES.legRight, MECH.legRight, -step]]) {
     ctx.drawImage(img, (leg[0] - MECH.anchor[0]) * MECH.scale, (leg[1] - MECH.anchor[1]) * MECH.scale + dy, img.width * k, img.height * k);
   }
   const b = SPRITES.body;
   ctx.drawImage(b, (MECH.body[0] - MECH.anchor[0]) * MECH.scale, (MECH.body[1] - MECH.anchor[1]) * MECH.scale + bob, b.width * k, b.height * k);
   ctx.filter = "none";
+  ctx.shadowBlur = 0;
   ctx.translate(MECH.shoulder[0], MECH.shoulder[1] + bob);
   ctx.rotate(local);
   drawPipeArm(p.flash > 0);
@@ -1019,9 +1081,14 @@ function updateFacing(p) {
   else if (c < -0.2) p.facing = -1;
 }
 
+function drawHeld(o) {
+  if (o.kind === "cube") drawCube(o);
+  else drawEnemy(o);
+}
+
 function drawClaw() {
   const g = game;
-  for (const t of g.enemies) if (t.thrown) drawEnemy(t);
+  for (const t of g.enemies.concat(g.cubes)) if (t.thrown) drawHeld(t);
   const e = g.held;
   if (e) {
     const sh = mechPoint(g.player, MECH.clawShoulder[0], MECH.clawShoulder[1]);
@@ -1034,26 +1101,16 @@ function drawClaw() {
     ctx.strokeStyle = "#e8b931";
     ctx.lineWidth = 3;
     ctx.stroke();
-    drawEnemy(e);
+    drawHeld(e);
     ctx.strokeStyle = "#e8b931";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(e.x, e.y, e.r + 5, 0, Math.PI * 2);
     ctx.stroke();
   }
-  if (state === "play" && !e) {
-    const p = g.player;
-    let best = null;
-    let bd = CONFIG.claw.pickRange;
-    for (const t of g.enemies) {
-      if (t.thrown || dist(t, p) > CONFIG.claw.reach) continue;
-      const d = Math.hypot(t.x - mouse.x, t.y - mouse.y);
-      if (d < bd) {
-        bd = d;
-        best = t;
-      }
-    }
-    if (best && g.clawCooldown <= 0) {
+  if (state === "play" && !e && g.clawCooldown <= 0) {
+    const best = clawTarget();
+    if (best) {
       ctx.strokeStyle = "rgba(232,185,49,0.7)";
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 4]);
@@ -1102,8 +1159,8 @@ function drawBar(x, y, w, h, ratio, color, label, value) {
   ctx.fillText(value, x + w - 8, y + h / 2 + 1);
 }
 
-function drawSlot(x, y, key, name, info, cooldown) {
-  const w = 170;
+function drawSlot(x, y, key, name, info, cooldown, active) {
+  const w = 150;
   const h = 54;
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillRect(x, y, w, h);
@@ -1111,7 +1168,7 @@ function drawSlot(x, y, key, name, info, cooldown) {
     ctx.fillStyle = "rgba(255,255,255,0.08)";
     ctx.fillRect(x, y, w * cooldown, h);
   }
-  ctx.strokeStyle = "#3a3f4a";
+  ctx.strokeStyle = active || "#3a3f4a";
   ctx.lineWidth = 2;
   ctx.strokeRect(x, y, w, h);
   ctx.font = `bold 12px ${FONT}`;
@@ -1124,10 +1181,10 @@ function drawSlot(x, y, key, name, info, cooldown) {
   ctx.fillText(key, x + 8 + kw / 2, y + 18);
   ctx.textAlign = "left";
   ctx.fillStyle = "#ffffff";
-  ctx.font = `bold 14px ${FONT}`;
-  ctx.fillText(name, x + kw + 16, y + 18);
+  ctx.font = `bold 13px ${FONT}`;
+  ctx.fillText(name, x + kw + 14, y + 18);
   ctx.fillStyle = "#9aa3ad";
-  ctx.font = `12px ${FONT}`;
+  ctx.font = `11px ${FONT}`;
   ctx.fillText(info, x + 10, y + 40);
 }
 
@@ -1151,10 +1208,19 @@ function drawHud() {
 
   const carrying = g.cleaners.reduce((n, r) => n + r.carry, 0);
   const y = H - 74;
-  drawSlot(20, y, "좌클릭", "집게팔", g.held ? "잡는 중 · 다시 클릭해 던지기" : "마우스 근처 적 잡기", g.clawCooldown / CONFIG.claw.cooldown);
-  drawSlot(200, y, "우클릭", "오염 폐수 방출", "누르고 있으면 계속 발사", 0);
-  drawSlot(380, y, "Q", "청소 로봇 사출", "출동 " + g.cleaners.length + " / " + c.max, g.ejectCooldown / c.cooldown);
-  drawSlot(560, y, "R", "청소 로봇 회수", "수거 중인 고철 " + carrying + "개", 0);
+  const secs = t => Math.ceil(t) + "초";
+  const ready = (cd, total) => (cd > 0 ? "대기 " + secs(cd) : "준비");
+  const slots = [
+    ["좌클릭", "집게팔", g.held ? "잡는 중 · 클릭해 던지기" : "적 · 큐브 잡기", g.clawCooldown / (CONFIG.claw.cooldown * mm("claw", "cooldown")), g.held ? "#e8b931" : null],
+    ["우클릭", "오염 폐수", "누르고 있기 · " + Math.floor(g.tank) + "%", 0, g.beam ? "#8fa832" : null],
+    ["Q", "청소 로봇", "출동 " + g.cleaners.length + " / " + c.max, g.ejectCooldown / (c.cooldown * mm("cleaner", "cooldown")), null],
+    ["R", "로봇 회수", "고철 " + carrying + "개 수거 중", 0, null],
+    ["E", "압축 지뢰", "고철 " + scrapCost(CONFIG.mine.cost, "mine") + " · 설치 " + g.mines.length + "/" + CONFIG.mine.max, g.mineCooldown / (CONFIG.mine.cooldown * mm("mine", "cooldown")), null],
+    ["F", "고철 압축", "고철 " + scrapCost(CONFIG.cube.cost, "compress") + " · 큐브 " + g.cubes.length + "/" + CONFIG.cube.max, g.cubeCooldown / (CONFIG.cube.cooldown * mm("compress", "cooldown")), null],
+    ["Shift", "청소 가속", g.boost > 0 ? "가속 중 " + secs(g.boost) : ready(g.boostCooldown), g.boost > 0 ? 0 : g.boostCooldown / (CONFIG.boost.cooldown * mm("boost", "cooldown")), g.boost > 0 ? "#5ff0c8" : null],
+    ["Space", "오버클럭", g.overclock > 0 ? "강화 " + secs(g.overclock) : g.recoil > 0 ? "반동 " + secs(g.recoil) : ready(g.overclockCooldown), g.overclock > 0 ? 0 : g.overclockCooldown / (CONFIG.overclock.cooldown * mm("overclock", "cooldown")), g.overclock > 0 ? "#ff9a3c" : g.recoil > 0 ? "#6b717c" : null]
+  ];
+  slots.forEach((sl, i) => drawSlot(20 + i * 156, y, sl[0], sl[1], sl[2], sl[3], sl[4]));
 
   ctx.textAlign = "right";
   ctx.textBaseline = "bottom";
@@ -1196,10 +1262,14 @@ function drawPrompt(text, y) {
 const CONTROLS = [
   ["WASD", "이동"],
   ["마우스", "조준"],
-  ["좌클릭", "집게팔 — 적 잡기, 다시 클릭해 던지기"],
-  ["우클릭 (누르고 있기)", "오염 폐수 방출"],
+  ["좌클릭", "집게팔 잡기 · 던지기"],
+  ["우클릭", "오염 폐수 (누르고 있기)"],
   ["Q", "청소 로봇 사출"],
-  ["R", "청소 로봇 회수 (수거한 고철을 가져옴)"],
+  ["R", "청소 로봇 회수"],
+  ["E", "압축 지뢰 설치"],
+  ["F", "고철 압축 (큐브)"],
+  ["Shift", "청소 가속화"],
+  ["Space", "오버클럭"],
   ["Esc", "일시정지"]
 ];
 
@@ -1358,13 +1428,15 @@ function drawTitle() {
     ctx.textBaseline = "middle";
     ctx.fillText("조작법", 124, 404);
     CONTROLS.forEach(([key, desc], i) => {
-      const y = 444 + i * 26;
-      ctx.font = `bold 16px ${FONT}`;
+      const col = i < 6 ? 0 : 1;
+      const y = 440 + (i % 6) * 26;
+      const x = col === 0 ? 124 : 430;
+      ctx.font = `bold 15px ${FONT}`;
       ctx.fillStyle = "#e8b931";
-      ctx.fillText(key, 124, y);
-      ctx.font = `16px ${FONT}`;
+      ctx.fillText(key, x, y);
+      ctx.font = `15px ${FONT}`;
       ctx.fillStyle = "#d7dce3";
-      ctx.fillText(desc, 320, y);
+      ctx.fillText(desc, x + 70, y);
     });
     drawTitleButton(titleBack, "돌아가기", true);
   }
@@ -1414,13 +1486,16 @@ function draw() {
   ctx.save();
   if (state === "play" && g.shake > 0) ctx.translate(rand(-1, 1) * g.shake, rand(-1, 1) * g.shake);
   drawFloor();
+  drawMines();
   drawScraps();
+  drawCubes();
   drawCleaners();
   drawEnemies();
   drawBeam();
   drawPlayer();
   drawClaw();
   drawParticles();
+  drawRings();
   drawTexts();
   ctx.restore();
   drawHud();
