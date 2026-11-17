@@ -4,6 +4,36 @@ const W = CONFIG.width;
 const H = CONFIG.height;
 const FONT = "'Pretendard', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif";
 
+const MECH = {
+  scale: 0.095,
+  spriteScale: 0.25,
+  anchor: [780, 520],
+  body: [82, 132],
+  legLeft: [448, 836],
+  legRight: [876, 836],
+  shoulder: [41, -1],
+  pipeSegments: 3,
+  pipeSegment: 11,
+  nozzle: 11,
+  pipeLength: 48,
+  chimney: [31, -20],
+  shutter: [0, 27]
+};
+
+const SPRITES = {};
+
+function loadSprite(name, src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      SPRITES[name] = img;
+      resolve();
+    };
+    img.onerror = () => reject(new Error(src));
+    img.src = src;
+  });
+}
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -92,7 +122,7 @@ let game = newGame();
 
 function newGame() {
   return {
-    player: { x: W / 2, y: H / 2, r: CONFIG.player.radius, hp: CONFIG.player.hp, maxHp: CONFIG.player.hp, aim: 0, flash: 0, walk: 0, smoke: 0 },
+    player: { x: W / 2, y: H / 2, r: CONFIG.player.radius, hp: CONFIG.player.hp, maxHp: CONFIG.player.hp, aim: 0, facing: 1, moving: false, flash: 0, walk: 0, smoke: 0 },
     tank: CONFIG.sludge.tank,
     tankLocked: false,
     refillWait: 0,
@@ -143,7 +173,7 @@ const titleBack = { x: 120, y: 604, w: 220, h: 48 };
 const titleScene = {
   t: 0,
   scale: 2.4,
-  mech: { x: 860, y: 470, r: 34, aim: 0, flash: 0, walk: 0 },
+  mech: { x: 860, y: 470, r: 34, aim: 0, facing: 1, moving: false, flash: 0, walk: 0 },
   drones: [],
   particles: [],
   spawn: 0,
@@ -307,9 +337,10 @@ function ejectCleaner() {
   const p = g.player;
   if (g.ejectCooldown > 0 || g.cleaners.length >= c.max) return;
   const a = p.aim;
+  const door = mechPoint(p, MECH.shutter[0], MECH.shutter[1]);
   g.cleaners.push({
-    x: p.x + Math.cos(a) * (p.r + c.radius + 2),
-    y: p.y + Math.sin(a) * (p.r + c.radius + 2),
+    x: door.x,
+    y: door.y,
     r: c.radius,
     vx: Math.cos(a) * c.launchSpeed,
     vy: Math.sin(a) * c.launchSpeed,
@@ -324,7 +355,7 @@ function ejectCleaner() {
     angle: a
   });
   g.ejectCooldown = c.cooldown;
-  burst(p.x + Math.cos(a) * p.r, p.y + Math.sin(a) * p.r, "#4fc3a1", 6, 120);
+  burst(door.x, door.y, "#e8b931", 6, 120);
 }
 
 function recallCleaners() {
@@ -406,7 +437,8 @@ function updatePlayer(dt) {
   if (keys.has("KeyA") || keys.has("ArrowLeft")) dx -= 1;
   if (keys.has("KeyD") || keys.has("ArrowRight")) dx += 1;
   const len = Math.hypot(dx, dy);
-  if (len > 0) {
+  p.moving = len > 0;
+  if (p.moving) {
     p.x += (dx / len) * c.speed * dt;
     p.y += (dy / len) * c.speed * dt;
     p.walk += dt;
@@ -414,12 +446,14 @@ function updatePlayer(dt) {
   p.x = clamp(p.x, p.r, W - p.r);
   p.y = clamp(p.y, p.r, H - p.r);
   p.aim = Math.atan2(mouse.y - p.y, mouse.x - p.x);
+  updateFacing(p);
   p.flash = Math.max(0, p.flash - dt);
   p.smoke -= dt;
   if (p.smoke <= 0) {
     p.smoke = 0.18;
     const life = rand(0.8, 1.2);
-    game.particles.push({ x: p.x - 12, y: p.y + 10, vx: rand(-10, 10), vy: rand(-40, -25), life, max: life, color: "#6b707a", size: rand(4, 7) });
+    const cp = mechPoint(p, MECH.chimney[0], MECH.chimney[1]);
+    game.particles.push({ x: cp.x, y: cp.y, vx: rand(-10, 10), vy: rand(-40, -25), life, max: life, color: "#6b707a", size: rand(4, 7) });
   }
 }
 
@@ -440,8 +474,9 @@ function updateSludge(dt) {
   if (g.tank <= 0) g.tankLocked = true;
   const cos = Math.cos(p.aim);
   const sin = Math.sin(p.aim);
-  const sx = p.x + cos * (p.r + 20);
-  const sy = p.y + sin * (p.r + 20);
+  const nozzle = mechNozzle(p);
+  const sx = nozzle.x;
+  const sy = nozzle.y;
   const ex = sx + cos * s.length;
   const ey = sy + sin * s.length;
   g.beam = { sx, sy, ex, ey };
@@ -677,20 +712,46 @@ function drawCleaners() {
     ctx.save();
     ctx.translate(r.x, r.y);
     ctx.rotate(r.angle);
-    const f = r.bump > 0 ? 4 : 0;
-    ctx.fillStyle = "#2b6b5a";
-    ctx.fillRect(r.r - 3 + f, -7, 7, 14);
+    const f = r.bump > 0 ? 3 : 0;
+    const spin = game.time * 18;
+    ctx.lineWidth = 2;
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(r.r * 0.45 + f, side * r.r * 0.85);
+      ctx.fillStyle = "#e8b931";
+      ctx.strokeStyle = "#1e1c21";
+      ctx.beginPath();
+      ctx.arc(0, 0, r.r * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.rotate(spin * side);
+      ctx.strokeStyle = "#7a5f12";
+      ctx.beginPath();
+      ctx.moveTo(-r.r * 0.35, 0);
+      ctx.lineTo(r.r * 0.35, 0);
+      ctx.moveTo(0, -r.r * 0.35);
+      ctx.lineTo(0, r.r * 0.35);
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.beginPath();
     ctx.arc(0, 0, r.r, 0, Math.PI * 2);
-    ctx.fillStyle = r.flash > 0 ? "#ffffff" : r.mode === "return" ? "#8fd8c4" : "#4fc3a1";
+    ctx.fillStyle = r.flash > 0 ? "#ffffff" : "#b9b2bd";
     ctx.fill();
+    ctx.strokeStyle = "#1e1c21";
     ctx.lineWidth = 2;
-    ctx.strokeStyle = "#1f4d41";
     ctx.stroke();
-    ctx.fillStyle = "#1f4d41";
     ctx.beginPath();
-    ctx.arc(4, 0, 3, 0, Math.PI * 2);
+    ctx.arc(0, 0, r.r * 0.68, 0, Math.PI * 2);
+    ctx.strokeStyle = r.mode === "return" ? "#5ff0c8" : "#9fd8c0";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, r.r * 0.42, 0, Math.PI * 2);
+    ctx.fillStyle = "#dcd7df";
     ctx.fill();
+    ctx.fillStyle = "#e8b931";
+    ctx.fillRect(r.r * 0.55, -2, 4, 4);
     ctx.restore();
     for (let i = 0; i < r.carry; i++) {
       ctx.fillStyle = "#cfd6e0";
@@ -757,47 +818,85 @@ function drawBeam(b = game.beam, w = CONFIG.sludge.width) {
   ctx.restore();
 }
 
+function drawPipeArm(flash) {
+  const fill = flash ? "#ffffff" : "#9a8f9e";
+  const light = flash ? "#ffffff" : "#b4aab8";
+  const shade = "#655f6a";
+  const line = "#1e1c21";
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = line;
+  for (let i = 0; i < MECH.pipeSegments; i++) {
+    const x = 4 + i * MECH.pipeSegment;
+    const h = 15 + i * 1.5;
+    ctx.fillStyle = fill;
+    ctx.fillRect(x, -h / 2, MECH.pipeSegment + 1, h);
+    ctx.strokeRect(x, -h / 2, MECH.pipeSegment + 1, h);
+    ctx.fillStyle = light;
+    ctx.fillRect(x + 2, -h / 2 + 2, MECH.pipeSegment - 3, 3);
+    ctx.fillStyle = shade;
+    ctx.fillRect(x + 2, h / 2 - 5, MECH.pipeSegment - 3, 3);
+  }
+  const nx = 4 + MECH.pipeSegments * MECH.pipeSegment;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(nx, -13, MECH.nozzle, 26, 5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#3a3640";
+  ctx.beginPath();
+  ctx.roundRect(nx + MECH.nozzle - 6, -9, 5, 18, 2);
+  ctx.fill();
+  ctx.fillStyle = "#6f6874";
+  for (const y of [-5, 0, 5]) ctx.fillRect(nx + MECH.nozzle - 5, y - 1, 3, 2);
+  ctx.fillStyle = flash ? "#ffffff" : "#5a5560";
+  ctx.beginPath();
+  ctx.arc(0, 0, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#8a828e";
+  ctx.beginPath();
+  ctx.arc(0, 0, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 function drawPlayer(p = game.player, scale = 1) {
-  const body = p.flash > 0 ? "#ffffff" : "#e8b931";
+  const f = p.facing || 1;
+  const k = MECH.scale / MECH.spriteScale;
+  const moving = p.moving ? 1 : 0;
+  const step = Math.sin(p.walk * 12) * 2.2 * moving;
+  const bob = -Math.abs(Math.sin(p.walk * 12)) * 1.2 * moving;
+  const local = f === 1 ? p.aim : Math.PI - p.aim;
   ctx.save();
   ctx.translate(p.x, p.y);
-  ctx.scale(scale, scale);
-  const offset = (p.walk * 60) % 10;
-  for (const side of [-1, 1]) {
-    const x = side < 0 ? -38 : 26;
-    ctx.fillStyle = "#3b4049";
-    ctx.fillRect(x, -30, 12, 60);
-    ctx.fillStyle = "#262a31";
-    for (let y = -30 + offset; y < 30; y += 10) ctx.fillRect(x, y, 12, 3);
+  ctx.scale(scale * f, scale);
+  if (p.flash > 0) ctx.filter = "brightness(2.5)";
+  for (const [img, leg, dy] of [[SPRITES.legLeft, MECH.legLeft, step], [SPRITES.legRight, MECH.legRight, -step]]) {
+    ctx.drawImage(img, (leg[0] - MECH.anchor[0]) * MECH.scale, (leg[1] - MECH.anchor[1]) * MECH.scale + dy, img.width * k, img.height * k);
   }
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.roundRect(-28, -28, 56, 56, 8);
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "#7a5f12";
-  ctx.stroke();
-  ctx.fillStyle = p.flash > 0 ? "#ffffff" : "#c99a1f";
-  ctx.fillRect(-20, -6, 40, 12);
-  ctx.fillStyle = "#2a2e36";
-  for (let x = -18; x < 20; x += 10) ctx.fillRect(x, -6, 5, 12);
-  ctx.fillStyle = "#4a505b";
-  ctx.beginPath();
-  ctx.arc(-12, 12, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.rotate(p.aim);
-  ctx.fillStyle = "#4a505b";
-  ctx.fillRect(6, -9, 44, 18);
-  ctx.strokeStyle = "#2a2e36";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(6, -9, 44, 18);
-  ctx.fillStyle = "#8fa832";
-  ctx.fillRect(48, -7, 8, 14);
-  ctx.fillStyle = "#5d646e";
-  ctx.beginPath();
-  ctx.arc(0, 0, 11, 0, Math.PI * 2);
-  ctx.fill();
+  const b = SPRITES.body;
+  ctx.drawImage(b, (MECH.body[0] - MECH.anchor[0]) * MECH.scale, (MECH.body[1] - MECH.anchor[1]) * MECH.scale + bob, b.width * k, b.height * k);
+  ctx.filter = "none";
+  ctx.translate(MECH.shoulder[0], MECH.shoulder[1] + bob);
+  ctx.rotate(local);
+  drawPipeArm(p.flash > 0);
   ctx.restore();
+}
+
+function mechPoint(p, lx, ly, scale = 1) {
+  return { x: p.x + (p.facing || 1) * lx * scale, y: p.y + ly * scale };
+}
+
+function mechNozzle(p, scale = 1) {
+  const f = p.facing || 1;
+  const local = f === 1 ? p.aim : Math.PI - p.aim;
+  const len = MECH.pipeLength + 2;
+  return mechPoint(p, MECH.shoulder[0] + Math.cos(local) * len, MECH.shoulder[1] + Math.sin(local) * len, scale);
+}
+
+function updateFacing(p) {
+  const c = Math.cos(p.aim);
+  if (c > 0.2) p.facing = 1;
+  else if (c < -0.2) p.facing = -1;
 }
 
 function drawParticles(list = game.particles) {
@@ -962,14 +1061,16 @@ function updateTitle(dt) {
     const want = Math.atan2(target.y - m.y, target.x - m.x);
     m.aim += (want - m.aim) * Math.min(1, dt * 4);
   }
+  updateFacing(m);
   s.fire -= dt;
   if (s.fire <= 0) s.fire = 2.4;
   s.beam = null;
   if (s.fire < 0.9 && target) {
     const cos = Math.cos(m.aim);
     const sin = Math.sin(m.aim);
-    const sx = m.x + cos * (m.r + 20) * s.scale;
-    const sy = m.y + sin * (m.r + 20) * s.scale;
+    const nozzle = mechNozzle(m, s.scale);
+    const sx = nozzle.x;
+    const sy = nozzle.y;
     s.beam = { sx, sy, ex: sx + cos * 560, ey: sy + sin * 560 };
     for (const d of s.drones) {
       if (!d.dead && distToSegment(d.x, d.y, s.beam.sx, s.beam.sy, s.beam.ex, s.beam.ey) < 44) {
@@ -988,7 +1089,8 @@ function updateTitle(dt) {
   if (s.smoke <= 0) {
     s.smoke = 0.12;
     const life = rand(1.2, 1.8);
-    s.particles.push({ x: m.x - 12 * s.scale, y: m.y + 12 * s.scale, vx: rand(-15, 15), vy: rand(-70, -45), life, max: life, color: "#6b707a", size: rand(8, 14) });
+    const cp = mechPoint(m, MECH.chimney[0], MECH.chimney[1], s.scale);
+    s.particles.push({ x: cp.x, y: cp.y, vx: rand(-15, 15), vy: rand(-70, -45), life, max: life, color: "#6b707a", size: rand(8, 14) });
   }
   s.drones = s.drones.filter(d => !d.dead && d.x > -40);
   updateParticles(s.particles, dt);
@@ -1166,4 +1268,12 @@ function frame(now) {
   draw();
   requestAnimationFrame(frame);
 }
-requestAnimationFrame(frame);
+
+Promise.all([
+  loadSprite("body", "assets/mech-body.png"),
+  loadSprite("legLeft", "assets/mech-leg-left.png"),
+  loadSprite("legRight", "assets/mech-leg-right.png")
+]).then(() => {
+  last = performance.now();
+  requestAnimationFrame(frame);
+});
