@@ -16,3 +16,367 @@ canvas {
   display: block;
   cursor: crosshair;
 }
+
+#upgrade {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 14, 0.78);
+  font-family: 'Pretendard', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  color: #dfe3ea;
+  z-index: 10;
+}
+
+#upgrade[hidden] {
+  display: none;
+}
+
+#upgrade .up-panel {
+  width: min(1180px, 96vw);
+  max-height: 94vh;
+  overflow: auto;
+  background: #12151b;
+  border: 2px solid #3a3f4a;
+  border-radius: 12px;
+  box-shadow: 0 0 0 4px #171a20, 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+#upgrade header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 16px 22px 18px;
+  background: repeating-linear-gradient(-45deg, #e8b931 0 12px, #171a20 12px 24px) bottom / 100% 6px no-repeat;
+}
+
+#upgrade .cap {
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: #e8b931;
+  font-weight: 700;
+}
+
+#upgrade h2 {
+  margin: 4px 0 0;
+  font-size: 26px;
+  color: #fff;
+}
+
+#upgrade .scrap {
+  font-size: 15px;
+  color: #9aa3ad;
+  text-align: right;
+}
+
+#upgrade .scrap b {
+  font-size: 28px;
+  color: #ffe27a;
+  margin-left: 6px;
+}
+
+#upgrade .scrap small {
+  display: block;
+  font-size: 12px;
+  color: #ff9a9a;
+  margin-top: 2px;
+}
+
+#upgrade .up-body {
+  display: grid;
+  grid-template-columns: 210px 1fr 1.3fr;
+  gap: 16px;
+  padding: 16px 22px;
+}
+
+#upgrade .dock-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#upgrade .circuit-dock {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  text-align: left;
+  padding: 8px 10px;
+  background: #171a20;
+  border: 1px solid #2c313b;
+  border-radius: 8px;
+  color: #dfe3ea;
+  cursor: pointer;
+  font: inherit;
+}
+
+#upgrade .circuit-dock .key {
+  grid-row: span 2;
+}
+
+#upgrade .circuit-dock .nm {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#upgrade .pips {
+  display: flex;
+  gap: 3px;
+}
+
+#upgrade .pips i {
+  width: 16px;
+  height: 5px;
+  background: #2c313b;
+  border-radius: 2px;
+}
+
+#upgrade .pips i.on {
+  background: #e8b931;
+}
+
+#upgrade .circuit-dock:hover,
+#upgrade .circuit-dock.sel {
+  border-color: #e8b931;
+}
+
+#upgrade .circuit-dock.sel {
+  background: #211d10;
+}
+
+#upgrade h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#upgrade h3 small {
+  margin-left: auto;
+  color: #9aa3ad;
+  font-weight: 400;
+  font-size: 12px;
+}
+
+#upgrade .key {
+  display: inline-block;
+  padding: 2px 7px;
+  background: #e8b931;
+  color: #171a20;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+#upgrade .cartridge-portrait {
+  position: relative;
+  padding: 18px;
+  background: #0e1014;
+  border: 2px solid #3a3f4a;
+  border-radius: 10px;
+}
+
+#upgrade .cartridge-art {
+  position: absolute;
+  inset: 8px;
+  border: 2px dashed #262a33;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+#upgrade .cartridge-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, 96px);
+  justify-content: center;
+  gap: 12px;
+}
+
+#upgrade .cartridge-slot {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #171a20;
+  border: 2px solid #3a3f4a;
+  border-radius: 8px;
+  color: #4a505b;
+  font-size: 32px;
+  cursor: pointer;
+  padding: 6px;
+}
+
+#upgrade .cartridge-slot.empty {
+  cursor: default;
+  border-style: dashed;
+}
+
+#upgrade .cartridge-slot img {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+#upgrade .cartridge-slot.modified {
+  border-color: #ff9a3c;
+}
+
+#upgrade .cartridge-slot.sel {
+  box-shadow: 0 0 0 3px #e8b931;
+}
+
+#upgrade .module-details {
+  margin-top: 12px;
+  padding: 12px;
+  background: #171a20;
+  border: 1px solid #2c313b;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #cfd6e0;
+}
+
+#upgrade .module-details p {
+  margin: 4px 0 0;
+}
+
+#upgrade .module-details b {
+  color: #fff;
+  font-size: 14px;
+}
+
+#upgrade .module-details.hint {
+  color: #6b717c;
+}
+
+#upgrade .module-details button {
+  margin-top: 10px;
+  padding: 7px 12px;
+  background: transparent;
+  color: #ff9a9a;
+  border: 1px solid #ff9a9a;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#upgrade .module-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#upgrade .module-card {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 8px 10px;
+  background: #171a20;
+  border: 1px solid #2c313b;
+  border-radius: 8px;
+  color: #dfe3ea;
+  cursor: pointer;
+  font: inherit;
+}
+
+#upgrade .module-card img {
+  width: 52px;
+  height: 52px;
+  image-rendering: pixelated;
+}
+
+#upgrade .module-card b {
+  font-size: 14px;
+  color: #fff;
+  margin-right: 6px;
+}
+
+#upgrade .module-card em {
+  font-style: normal;
+  font-size: 11px;
+  color: #9aa3ad;
+}
+
+#upgrade .module-card .d {
+  display: block;
+  font-size: 12px;
+  color: #b9c0ca;
+  margin-top: 3px;
+  line-height: 1.45;
+}
+
+#upgrade .module-card .cost {
+  font-size: 11px;
+  color: #9aa3ad;
+  text-align: right;
+  white-space: nowrap;
+}
+
+#upgrade .module-card .cost strong {
+  color: #ffe27a;
+  font-size: 13px;
+}
+
+#upgrade .module-card.special {
+  border-color: #5a4520;
+}
+
+#upgrade .module-card.special b {
+  color: #ffb347;
+}
+
+#upgrade .module-card:hover:not(:disabled) {
+  border-color: #e8b931;
+  background: #1d1a12;
+}
+
+#upgrade .module-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#upgrade .module-card.owned {
+  opacity: 0.85;
+  border-color: #3e5a3a;
+}
+
+#upgrade footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px 16px;
+  border-top: 2px solid #262a33;
+}
+
+#upgrade .rule {
+  font-size: 12px;
+  color: #6b717c;
+}
+
+#upgrade .go {
+  padding: 12px 22px;
+  background: #e8b931;
+  color: #171a20;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+#upgrade .go:hover {
+  background: #ffd24d;
+}
+
+canvas:focus {
+  outline: none;
+}

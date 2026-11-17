@@ -27,6 +27,7 @@ function compressScrap() {
   if (g.cubeCooldown > 0) return;
   const cost = scrapCost(k.cost, "compress");
   if (!payScrap(cost, p.x, p.y - 50)) return;
+  if (modOn("compress", "special")) absorbScrap();
   const a = p.aim;
   const x = clamp(p.x + Math.cos(a) * (p.r + k.radius + 18), k.radius, W - k.radius);
   const y = clamp(p.y + Math.sin(a) * (p.r + k.radius + 18), k.radius, H - k.radius);
@@ -141,6 +142,7 @@ function updateSkills(dt) {
       g.overclock = 0;
       g.recoil = CONFIG.overclock.recoil;
       addText(g.player.x, g.player.y - 50, "과열 반동", "#9aa3ad");
+      if (modOn("overclock", "special")) emergencySteam();
     }
   } else {
     g.recoil = Math.max(0, g.recoil - dt);
@@ -166,6 +168,11 @@ function updateSkills(dt) {
       }
     }
   }
+  if (g.eDownAt !== null && keys.has("KeyE") && g.time - g.eDownAt >= CONFIG.mine.detonateHold) {
+    g.eDownAt = null;
+    detonateAll();
+  }
+  updatePuddles(dt);
   for (const r of g.rings) {
     r.life -= dt;
     r.r = r.max * (1 - r.life / r.total);
@@ -247,6 +254,154 @@ function drawRings() {
     ctx.beginPath();
     ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
     ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function pressMine() {
+  if (modOn("mine", "special")) game.eDownAt = game.time;
+  else placeMine();
+}
+
+function releaseMine() {
+  const g = game;
+  if (g.eDownAt === null) return;
+  g.eDownAt = null;
+  placeMine();
+}
+
+function detonateAll() {
+  const g = game;
+  const list = g.mines.filter(m => !m.dead);
+  if (!list.length) {
+    addText(g.player.x, g.player.y - 50, "터뜨릴 지뢰가 없음", "#9aa3ad");
+    return;
+  }
+  for (const m of list) explodeMine(m);
+  addText(g.player.x, g.player.y - 50, "예약 기폭!", "#ffb347");
+}
+
+function absorbScrap() {
+  const g = game;
+  const p = g.player;
+  let n = 0;
+  for (const s of g.scraps) {
+    if (s.dead || dist(s, p) > CONFIG.absorb.range) continue;
+    s.dead = true;
+    n++;
+    const life = 0.35;
+    g.particles.push({ x: s.x, y: s.y, vx: (p.x - s.x) / life, vy: (p.y - s.y) / life, life, max: life, color: "#cfd6e0", size: 5 });
+  }
+  if (n > 0) {
+    g.scrap += n;
+    g.scrapPulse = 0.4;
+    addText(p.x, p.y - 70, "+" + n + " 고철 흡수", "#ffe27a");
+  }
+}
+
+function emergencySteam() {
+  const g = game;
+  const k = CONFIG.steam;
+  const p = g.player;
+  for (const e of g.enemies) {
+    if (e.dead || e.held || e.type !== "drone") continue;
+    const d = dist(e, p);
+    if (d > k.range || d === 0) continue;
+    e.x += ((e.x - p.x) / d) * k.push;
+    e.y += ((e.y - p.y) / d) * k.push;
+    e.x = clamp(e.x, e.r, W - e.r);
+    e.y = clamp(e.y, e.r, H - e.r);
+    e.stun = Math.max(e.stun || 0, k.stun);
+  }
+  const cp = mechPoint(p, MECH.chimney[0], MECH.chimney[1]);
+  for (let i = 0; i < 30; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const v = rand(80, 260);
+    const life = rand(0.5, 1);
+    g.particles.push({ x: cp.x, y: cp.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life, max: life, color: "#e6e8ec", size: rand(6, 12) });
+  }
+  g.rings.push({ x: p.x, y: p.y, r: 0, max: k.range, life: 0.4, total: 0.4, color: "#e6e8ec" });
+  addText(p.x, p.y - 70, "비상 배기!", "#e6e8ec");
+}
+
+function spawnPuddle(b) {
+  const t = rand(0.15, 1);
+  game.puddles.push({ x: b.sx + (b.ex - b.sx) * t + rand(-8, 8), y: b.sy + (b.ey - b.sy) * t + rand(-8, 8), r: CONFIG.puddle.radius * rand(0.8, 1.2), life: CONFIG.puddle.life, total: CONFIG.puddle.life });
+}
+
+function inPuddle(e) {
+  for (const pd of game.puddles) if (dist(e, pd) < pd.r + e.r * 0.5) return true;
+  return false;
+}
+
+function updateCleanerSpecials(dt, damage) {
+  const g = game;
+  const f = CONFIG.fusion;
+  const p = g.player;
+  if (modOn("cleaner", "special")) {
+    const pool = g.cleaners.filter(r => !r.dead && !r.fused && r.mode === "work" && r.launch <= 0);
+    for (let i = 0; i < pool.length; i++) {
+      for (let j = i + 1; j < pool.length; j++) {
+        const a = pool[i];
+        const b = pool[j];
+        if (a.dead || b.dead || a.fused || b.fused || dist(a, b) > a.r + b.r + 2) continue;
+        a.fused = true;
+        a.r = f.radius;
+        a.maxHp = (a.maxHp + b.maxHp) * f.hpMul;
+        a.hp = (a.hp + b.hp) * f.hpMul;
+        a.carry += b.carry;
+        a.power = f.damageMul;
+        a.x = (a.x + b.x) / 2;
+        a.y = (a.y + b.y) / 2;
+        b.dead = true;
+        burst(a.x, a.y, "#e8b931", 16, 180);
+        addText(a.x, a.y - 26, "융합!", "#e8b931");
+      }
+    }
+  }
+  for (const r of g.cleaners) {
+    if (!r.fused || r.dead) continue;
+    r.spinTimer = (r.spinTimer || 0) - dt;
+    r.spinFx = Math.max(0, (r.spinFx || 0) - dt);
+    if (r.mode !== "work" || r.spinTimer > 0) continue;
+    const range = r.r + f.spinRange;
+    const near = g.enemies.filter(e => !e.dead && !e.held && !e.thrown && dist(e, r) <= range + e.r);
+    if (near.length < 2) continue;
+    for (const e of near) damageEnemy(e, damage * f.spinDamage * r.power);
+    r.spinTimer = f.spinInterval / (g.boost > 0 ? CONFIG.boost.speedMul : 1);
+    r.spinFx = 0.25;
+    burst(r.x, r.y, "#e8b931", 8, 160);
+  }
+  if (g.boost > 0 && modOn("boost", "special")) {
+    for (const r of g.cleaners) {
+      if (r.dead || r.mode !== "return") continue;
+      for (const s of g.scraps) {
+        if (!s.dead && dist(r, s) < r.r + CONFIG.emergency.range) {
+          s.dead = true;
+          r.carry++;
+        }
+      }
+    }
+  }
+}
+
+function updatePuddles(dt) {
+  const g = game;
+  for (const pd of g.puddles) pd.life -= dt;
+  g.puddles = g.puddles.filter(pd => pd.life > 0);
+}
+
+function drawPuddles() {
+  for (const pd of game.puddles) {
+    ctx.globalAlpha = clamp(pd.life / pd.total, 0, 1) * 0.55;
+    ctx.fillStyle = "#6f8f22";
+    ctx.beginPath();
+    ctx.ellipse(pd.x, pd.y, pd.r, pd.r * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#a9c84a";
+    ctx.beginPath();
+    ctx.ellipse(pd.x - pd.r * 0.2, pd.y - pd.r * 0.15, pd.r * 0.45, pd.r * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.globalAlpha = 1;
 }

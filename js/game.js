@@ -140,6 +140,10 @@ function newGame() {
     recoil: 0,
     overclockCooldown: 0,
     cartridges: newCartridges(),
+    puddles: [],
+    puddleTimer: 0,
+    eDownAt: null,
+    upgradedWave: 0,
     refillWait: 0,
     beam: null,
     cleaners: [],
@@ -246,7 +250,10 @@ window.addEventListener("keydown", e => {
   keys.add(e.code);
   onPress(e.code);
 });
-window.addEventListener("keyup", e => keys.delete(e.code));
+window.addEventListener("keyup", e => {
+  keys.delete(e.code);
+  if (state === "play" && e.code === "KeyE") releaseMine();
+});
 window.addEventListener("blur", () => {
   keys.clear();
   mouse.spray = false;
@@ -288,6 +295,10 @@ function onPress(code) {
     titleKey(code);
     return;
   }
+  if (state === "upgrade") {
+    if (code === "Enter") closeUpgrade();
+    return;
+  }
   if (state === "over") {
     if (!canRestart()) return;
     if (code === "Space" || code === "Enter") startGame();
@@ -302,7 +313,7 @@ function onPress(code) {
   if (state !== "play") return;
   if (code === "KeyQ") ejectCleaner();
   if (code === "KeyR") recallCleaners();
-  if (code === "KeyE") placeMine();
+  if (code === "KeyE") pressMine();
   if (code === "KeyF") compressScrap();
   if (code === "ShiftLeft" || code === "ShiftRight") startBoost();
   if (code === "Space") startOverclock();
@@ -432,7 +443,9 @@ function clawTarget() {
 function clawImpact(e) {
   const g = game;
   const k = CONFIG.claw;
-  const dmg = mm("claw", "damage") * ocMul();
+  const depth = e.thrown && e.thrown.chain ? e.thrown.chain : 0;
+  const chain = modOn("claw", "special") && depth < CONFIG.chain.depth;
+  const dmg = mm("claw", "damage") * ocMul() * Math.pow(CONFIG.chain.falloff, depth);
   const stun = k.stun * mm("claw", "duration");
   e.thrown = null;
   e.stun = stun;
@@ -443,7 +456,9 @@ function clawImpact(e) {
     if (d <= k.impactRadius * mm("claw", "range") + o.r) {
       damageEnemy(o, k.impactDamage * dmg);
       o.stun = Math.max(o.stun || 0, stun);
-      if (d > 0) {
+      if (chain && d > 0 && !o.thrown) {
+        o.thrown = { vx: ((o.x - e.x) / d) * CONFIG.chain.speed, vy: ((o.y - e.y) / d) * CONFIG.chain.speed, t: CONFIG.chain.time, chain: depth + 1, ignore: e };
+      } else if (d > 0) {
         o.x += ((o.x - e.x) / d) * 24;
         o.y += ((o.y - e.y) / d) * 24;
       }
@@ -478,7 +493,7 @@ function updateClaw(dt) {
     let hit = t.x < t.r || t.x > W - t.r || t.y < t.r || t.y > H - t.r;
     if (!hit) {
       for (const o of g.enemies) {
-        if (o !== t && !o.dead && !o.held && !o.thrown && dist(o, t) < o.r + t.r) {
+        if (o !== t && o !== t.thrown.ignore && !o.dead && !o.held && !o.thrown && dist(o, t) < o.r + t.r) {
           hit = true;
           break;
         }
@@ -561,6 +576,11 @@ function updateWaves(dt) {
     }
   } else if (g.enemies.length === 0) {
     g.breakTimer -= dt;
+    if (g.wave > 0 && g.upgradedWave !== g.wave && g.breakTimer <= wc.breakTime - wc.collectTime) {
+      g.upgradedWave = g.wave;
+      openUpgrade();
+      return;
+    }
     if (g.breakTimer <= 0) {
       g.wave++;
       g.toSpawn = wc.baseCount + (g.wave - 1) * wc.countPerWave;
@@ -626,6 +646,13 @@ function updateSludge(dt) {
   const ex = sx + cos * s.length * reach;
   const ey = sy + sin * s.length * reach;
   g.beam = { sx, sy, ex, ey, w: width };
+  if (modOn("sludge", "special")) {
+    g.puddleTimer -= dt;
+    if (g.puddleTimer <= 0) {
+      g.puddleTimer = CONFIG.puddle.interval;
+      spawnPuddle(g.beam);
+    }
+  }
   for (const e of g.enemies) {
     if (distToSegment(e.x, e.y, sx, sy, ex, ey) <= width / 2 + e.r) {
       damageEnemy(e, s.dps * mm("sludge", "damage") * ocMul() * dt);
@@ -688,7 +715,7 @@ function updateCleaners(dt) {
         r.angle = Math.atan2(enemy.y - r.y, enemy.x - r.x);
         if (dist(r, enemy) <= enemy.r + r.r + reach) {
           if (r.attackTimer <= 0) {
-            damageEnemy(enemy, damage);
+            damageEnemy(enemy, damage * (r.power || 1));
             r.attackTimer = interval;
             r.bump = 0.12;
             burst(enemy.x, enemy.y, "#e8f0f2", 3, 90);
@@ -723,7 +750,8 @@ function updateCleaners(dt) {
       }
     }
   });
-  separate(g.cleaners, 0.5);
+  updateCleanerSpecials(dt, damage);
+  separate(g.cleaners.filter(r => !r.dead), 0.5);
   for (const r of g.cleaners) {
     pushOut(r, p);
     r.x = clamp(r.x, r.r, W - r.r);
@@ -755,7 +783,7 @@ function updateEnemies(dt) {
     }
     e.angle = Math.atan2(target.y - e.y, target.x - e.x);
     if (best - e.r > 3) {
-      moveToward(e, target.x, target.y, e.speed * dt);
+      moveToward(e, target.x, target.y, e.speed * (inPuddle(e) ? CONFIG.puddle.slow : 1) * dt);
     } else if (e.attackTimer <= 0) {
       e.attackTimer = CONFIG.enemyAttackInterval;
       hitTarget(target, e.damage);
@@ -900,6 +928,13 @@ function drawCleaners() {
       ctx.lineTo(0, r.r * 0.35);
       ctx.stroke();
       ctx.restore();
+    }
+    if (r.fused) {
+      ctx.strokeStyle = r.spinFx > 0 ? "#ffe27a" : "rgba(232,185,49,0.7)";
+      ctx.lineWidth = r.spinFx > 0 ? 4 : 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, r.spinFx > 0 ? r.r + CONFIG.fusion.spinRange * (1 - r.spinFx / 0.25) : r.r + 7, 0, Math.PI * 2);
+      ctx.stroke();
     }
     if (game.boost > 0) {
       ctx.strokeStyle = "rgba(95,240,200,0.6)";
@@ -1239,7 +1274,8 @@ function drawHud() {
   } else if (state === "play" && g.toSpawn === 0 && g.enemies.length === 0) {
     ctx.font = `bold 18px ${FONT}`;
     ctx.fillStyle = "#cfd6e0";
-    const text = g.wave === 0 ? "곧 중앙 AI의 공격이 시작됩니다" : "다음 웨이브까지 " + Math.ceil(g.breakTimer) + "초";
+    const toUpgrade = g.breakTimer - (CONFIG.waves.breakTime - CONFIG.waves.collectTime);
+    const text = g.wave === 0 ? "곧 중앙 AI의 공격이 시작됩니다" : g.upgradedWave !== g.wave ? "웨이브 완료! 고철을 모으세요 · 강화 구역까지 " + Math.max(1, Math.ceil(toUpgrade)) + "초" : "다음 웨이브까지 " + Math.ceil(g.breakTimer) + "초";
     ctx.fillText(text, W / 2, 40);
   }
 }
@@ -1486,6 +1522,7 @@ function draw() {
   ctx.save();
   if (state === "play" && g.shake > 0) ctx.translate(rand(-1, 1) * g.shake, rand(-1, 1) * g.shake);
   drawFloor();
+  drawPuddles();
   drawMines();
   drawScraps();
   drawCubes();
