@@ -10,7 +10,7 @@
 - 만드는 방식: HTML + JavaScript, 빌드 · 라이브러리 없음. `index.html`을 브라우저로 열면 바로 실행
 - 버전 · 수치: `js/config.js` 한 곳에서 관리 (`VERSION`, `CONFIG`)
 - 업데이트 내역: `CHANGELOG.md`
-- 실행 · 배포: (GitHub Pages 설정 후 주소 적기)
+- 실행 · 배포: https://sinmustard.github.io/r/ (GitHub Pages, `main` 브랜치에 올리면 1~2분 뒤 반영)
 
 위 칸이 비어 있으면 큰 구조(언어 · 엔진 · 폴더 구조)를 마음대로 정하지 말고, 이슈로 먼저 물어보세요.
 
