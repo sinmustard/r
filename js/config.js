@@ -1,4 +1,4 @@
-const VERSION = "0.6";
+const VERSION = "0.7";
 
 const CONFIG = {
   width: 1280,
@@ -21,8 +21,12 @@ const CONFIG = {
   enemyAttackInterval: 0.8,
   enemies: {
     drone: { name: "소형 드론", radius: 13, speed: 120, hp: 30, damage: 10, scrap: 1, color: "#e0525a" },
-    guard: { name: "경비 로봇", radius: 22, speed: 70, hp: 120, damage: 22, scrap: 3, color: "#b44ad8" }
+    guard: { name: "경비 로봇", radius: 22, speed: 70, hp: 120, damage: 22, scrap: 3, color: "#b44ad8" },
+    boss: { name: "구역 관리 기체", radius: 40, speed: 55, hp: 1400, damage: 35, scrap: 25, color: "#c0392b" }
   },
-  waves: { firstDelay: 3, breakTime: 4, collectTime: 3, afterUpgrade: 2, baseCount: 6, countPerWave: 3, hpPerWave: 0.08, guardFromWave: 2, guardRatio: 0.2, spawnInterval: 0.5 },
+  battle: { spawnInterval: 0.5, baseCount: 6, countPerLevel: 2, hpPerLevel: 0.08, guardFromLevel: 2, guardRatio: 0.2, eliteGuardRatio: 0.5, eliteHp: 1.3, collectTime: 3 },
+  route: { nodesPerZone: 6, minChoices: 2, maxChoices: 3 },
+  boss: { hpPerZone: 0.5, summonEvery: 6, summonCount: 4, chargeEvery: 4.5, chargeWindup: 0.7, chargeSpeed: 420, chargeTime: 0.55, chargeRange: 520, chargeDamage: 45 },
+  events: { repairCost: 8, repairHp: 120, pileBig: 12, pileHurt: 20, pileSmall: 6, crateScrap: 8, crateHp: 60 },
   scrap: { radius: 7, life: 25 }
 };

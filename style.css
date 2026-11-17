@@ -17,7 +17,7 @@ canvas {
   cursor: crosshair;
 }
 
-#upgrade {
+.overlay {
   position: fixed;
   inset: 0;
   display: flex;
@@ -29,11 +29,11 @@ canvas {
   z-index: 10;
 }
 
-#upgrade[hidden] {
+.overlay[hidden] {
   display: none;
 }
 
-#upgrade .up-panel {
+.overlay .up-panel {
   width: min(1180px, 96vw);
   max-height: 94vh;
   overflow: auto;
@@ -43,7 +43,7 @@ canvas {
   box-shadow: 0 0 0 4px #171a20, 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 
-#upgrade header {
+.overlay header {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
@@ -51,52 +51,52 @@ canvas {
   background: repeating-linear-gradient(-45deg, #e8b931 0 12px, #171a20 12px 24px) bottom / 100% 6px no-repeat;
 }
 
-#upgrade .cap {
+.overlay .cap {
   font-size: 12px;
   letter-spacing: 0.3em;
   color: #e8b931;
   font-weight: 700;
 }
 
-#upgrade h2 {
+.overlay h2 {
   margin: 4px 0 0;
   font-size: 26px;
   color: #fff;
 }
 
-#upgrade .scrap {
+.overlay .scrap {
   font-size: 15px;
   color: #9aa3ad;
   text-align: right;
 }
 
-#upgrade .scrap b {
+.overlay .scrap b {
   font-size: 28px;
   color: #ffe27a;
   margin-left: 6px;
 }
 
-#upgrade .scrap small {
+.overlay .scrap small {
   display: block;
   font-size: 12px;
   color: #ff9a9a;
   margin-top: 2px;
 }
 
-#upgrade .up-body {
+.overlay .up-body {
   display: grid;
   grid-template-columns: 210px 1fr 1.3fr;
   gap: 16px;
   padding: 16px 22px;
 }
 
-#upgrade .dock-list {
+.overlay .dock-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-#upgrade .circuit-dock {
+.overlay .circuit-dock {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 4px 8px;
@@ -111,41 +111,41 @@ canvas {
   font: inherit;
 }
 
-#upgrade .circuit-dock .key {
+.overlay .circuit-dock .key {
   grid-row: span 2;
 }
 
-#upgrade .circuit-dock .nm {
+.overlay .circuit-dock .nm {
   font-size: 13px;
   font-weight: 700;
 }
 
-#upgrade .pips {
+.overlay .pips {
   display: flex;
   gap: 3px;
 }
 
-#upgrade .pips i {
+.overlay .pips i {
   width: 16px;
   height: 5px;
   background: #2c313b;
   border-radius: 2px;
 }
 
-#upgrade .pips i.on {
+.overlay .pips i.on {
   background: #e8b931;
 }
 
-#upgrade .circuit-dock:hover,
-#upgrade .circuit-dock.sel {
+.overlay .circuit-dock:hover,
+.overlay .circuit-dock.sel {
   border-color: #e8b931;
 }
 
-#upgrade .circuit-dock.sel {
+.overlay .circuit-dock.sel {
   background: #211d10;
 }
 
-#upgrade h3 {
+.overlay h3 {
   margin: 0 0 10px;
   font-size: 16px;
   color: #fff;
@@ -154,14 +154,14 @@ canvas {
   gap: 8px;
 }
 
-#upgrade h3 small {
+.overlay h3 small {
   margin-left: auto;
   color: #9aa3ad;
   font-weight: 400;
   font-size: 12px;
 }
 
-#upgrade .key {
+.overlay .key {
   display: inline-block;
   padding: 2px 7px;
   background: #e8b931;
@@ -172,7 +172,7 @@ canvas {
   text-align: center;
 }
 
-#upgrade .cartridge-portrait {
+.overlay .cartridge-portrait {
   position: relative;
   padding: 18px;
   background: #0e1014;
@@ -180,7 +180,7 @@ canvas {
   border-radius: 10px;
 }
 
-#upgrade .cartridge-art {
+.overlay .cartridge-art {
   position: absolute;
   inset: 8px;
   border: 2px dashed #262a33;
@@ -188,7 +188,7 @@ canvas {
   pointer-events: none;
 }
 
-#upgrade .cartridge-grid {
+.overlay .cartridge-grid {
   position: relative;
   display: grid;
   grid-template-columns: repeat(2, 96px);
@@ -196,7 +196,7 @@ canvas {
   gap: 12px;
 }
 
-#upgrade .cartridge-slot {
+.overlay .cartridge-slot {
   aspect-ratio: 1;
   display: flex;
   align-items: center;
@@ -210,26 +210,26 @@ canvas {
   padding: 6px;
 }
 
-#upgrade .cartridge-slot.empty {
+.overlay .cartridge-slot.empty {
   cursor: default;
   border-style: dashed;
 }
 
-#upgrade .cartridge-slot img {
+.overlay .cartridge-slot img {
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
 }
 
-#upgrade .cartridge-slot.modified {
+.overlay .cartridge-slot.modified {
   border-color: #ff9a3c;
 }
 
-#upgrade .cartridge-slot.sel {
+.overlay .cartridge-slot.sel {
   box-shadow: 0 0 0 3px #e8b931;
 }
 
-#upgrade .module-details {
+.overlay .module-details {
   margin-top: 12px;
   padding: 12px;
   background: #171a20;
@@ -240,20 +240,20 @@ canvas {
   color: #cfd6e0;
 }
 
-#upgrade .module-details p {
+.overlay .module-details p {
   margin: 4px 0 0;
 }
 
-#upgrade .module-details b {
+.overlay .module-details b {
   color: #fff;
   font-size: 14px;
 }
 
-#upgrade .module-details.hint {
+.overlay .module-details.hint {
   color: #6b717c;
 }
 
-#upgrade .module-details button {
+.overlay .module-details button {
   margin-top: 10px;
   padding: 7px 12px;
   background: transparent;
@@ -265,13 +265,13 @@ canvas {
   cursor: pointer;
 }
 
-#upgrade .module-list {
+.overlay .module-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-#upgrade .module-card {
+.overlay .module-card {
   display: grid;
   grid-template-columns: 52px 1fr auto;
   gap: 10px;
@@ -286,25 +286,25 @@ canvas {
   font: inherit;
 }
 
-#upgrade .module-card img {
+.overlay .module-card img {
   width: 52px;
   height: 52px;
   image-rendering: pixelated;
 }
 
-#upgrade .module-card b {
+.overlay .module-card b {
   font-size: 14px;
   color: #fff;
   margin-right: 6px;
 }
 
-#upgrade .module-card em {
+.overlay .module-card em {
   font-style: normal;
   font-size: 11px;
   color: #9aa3ad;
 }
 
-#upgrade .module-card .d {
+.overlay .module-card .d {
   display: block;
   font-size: 12px;
   color: #b9c0ca;
@@ -312,42 +312,42 @@ canvas {
   line-height: 1.45;
 }
 
-#upgrade .module-card .cost {
+.overlay .module-card .cost {
   font-size: 11px;
   color: #9aa3ad;
   text-align: right;
   white-space: nowrap;
 }
 
-#upgrade .module-card .cost strong {
+.overlay .module-card .cost strong {
   color: #ffe27a;
   font-size: 13px;
 }
 
-#upgrade .module-card.special {
+.overlay .module-card.special {
   border-color: #5a4520;
 }
 
-#upgrade .module-card.special b {
+.overlay .module-card.special b {
   color: #ffb347;
 }
 
-#upgrade .module-card:hover:not(:disabled) {
+.overlay .module-card:hover:not(:disabled) {
   border-color: #e8b931;
   background: #1d1a12;
 }
 
-#upgrade .module-card:disabled {
+.overlay .module-card:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-#upgrade .module-card.owned {
+.overlay .module-card.owned {
   opacity: 0.85;
   border-color: #3e5a3a;
 }
 
-#upgrade footer {
+.overlay footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -356,12 +356,12 @@ canvas {
   border-top: 2px solid #262a33;
 }
 
-#upgrade .rule {
+.overlay .rule {
   font-size: 12px;
   color: #6b717c;
 }
 
-#upgrade .go {
+.overlay .go {
   padding: 12px 22px;
   background: #e8b931;
   color: #171a20;
@@ -373,10 +373,160 @@ canvas {
   cursor: pointer;
 }
 
-#upgrade .go:hover {
+.overlay .go:hover {
   background: #ffd24d;
 }
 
 canvas:focus {
   outline: none;
+}
+
+.overlay .route-panel {
+  width: min(920px, 94vw);
+}
+
+.overlay .scrap .hp {
+  color: #9fd8a0;
+}
+
+.overlay .route-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 22px 4px;
+}
+
+.overlay .route-track i {
+  flex: 1;
+  height: 8px;
+  background: #2c313b;
+  border-radius: 4px;
+}
+
+.overlay .route-track i.done {
+  background: #e8b931;
+}
+
+.overlay .route-track i.now {
+  background: #ffffff;
+  box-shadow: 0 0 0 2px #e8b931;
+}
+
+.overlay .route-track b {
+  padding: 3px 10px;
+  border: 2px solid #ff6b3c;
+  color: #ff6b3c;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.overlay .route-track b.now {
+  background: #ff6b3c;
+  color: #171a20;
+}
+
+.overlay .route-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  padding: 16px 22px 8px;
+}
+
+.overlay .route-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  padding: 18px;
+  min-height: 170px;
+  background: #171a20;
+  border: 2px solid #2c313b;
+  border-top: 6px solid var(--c);
+  border-radius: 10px;
+  color: #dfe3ea;
+  font: inherit;
+  cursor: pointer;
+}
+
+.overlay .route-card:hover {
+  border-color: var(--c);
+  background: #1c2027;
+}
+
+.overlay .route-card .num,
+.overlay .event-option .num {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  color: #6b717c;
+  font-weight: 800;
+}
+
+.overlay .route-card .tag {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--c);
+  color: #171a20;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.overlay .route-card b {
+  font-size: 20px;
+  color: #fff;
+}
+
+.overlay .route-card .d {
+  font-size: 13px;
+  color: #b9c0ca;
+  line-height: 1.5;
+}
+
+.overlay .event-text {
+  padding: 18px 22px 0;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #cfd6e0;
+}
+
+.overlay .event-text.result {
+  color: #ffe27a;
+}
+
+.overlay .event-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 22px 8px;
+}
+
+.overlay .event-option {
+  position: relative;
+  text-align: left;
+  padding: 14px 40px 14px 16px;
+  background: #171a20;
+  border: 2px solid #2c313b;
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.overlay .event-option:hover:not(:disabled) {
+  border-color: #4fa3e0;
+}
+
+.overlay .event-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.overlay .event-option.go-on {
+  background: #e8b931;
+  color: #171a20;
+  border-color: #e8b931;
+  font-weight: 800;
 }

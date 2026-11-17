@@ -143,7 +143,6 @@ function newGame() {
     puddles: [],
     puddleTimer: 0,
     eDownAt: null,
-    upgradedWave: 0,
     refillWait: 0,
     beam: null,
     cleaners: [],
@@ -155,11 +154,17 @@ function newGame() {
     scrap: 0,
     scrapPulse: 0,
     kills: 0,
-    wave: 0,
+    zone: 1,
+    step: 0,
+    node: null,
+    lastNode: null,
+    level: 0,
+    boss: null,
     toSpawn: 0,
     spawnTimer: 0,
-    breakTimer: CONFIG.waves.firstDelay,
+    clearTimer: -1,
     banner: 0,
+    bannerText: "",
     shake: 0,
     time: 0
   };
@@ -169,6 +174,7 @@ function startGame() {
   game = newGame();
   state = "play";
   mouse.spray = false;
+  openRoute();
 }
 
 function canRestart() {
@@ -299,6 +305,10 @@ function onPress(code) {
     if (code === "Enter") closeUpgrade();
     return;
   }
+  if (state === "route" || state === "event") {
+    routeKey(code);
+    return;
+  }
   if (state === "over") {
     if (!canRestart()) return;
     if (code === "Space" || code === "Enter") startGame();
@@ -340,10 +350,11 @@ function dropScrap(x, y, n) {
   }
 }
 
-function spawnEnemy() {
+function spawnEnemy(force) {
   const g = game;
-  const wc = CONFIG.waves;
-  const type = g.wave >= wc.guardFromWave && Math.random() < wc.guardRatio ? "guard" : "drone";
+  const bc = CONFIG.battle;
+  const ratio = g.node === "elite" ? bc.eliteGuardRatio : bc.guardRatio;
+  const type = force || (g.level >= bc.guardFromLevel && Math.random() < ratio ? "guard" : "drone");
   const d = CONFIG.enemies[type];
   const side = Math.floor(Math.random() * 4);
   let x;
@@ -361,8 +372,12 @@ function spawnEnemy() {
     x = -d.radius;
     y = Math.random() * H;
   }
-  const hp = d.hp * (1 + (g.wave - 1) * wc.hpPerWave);
-  g.enemies.push({ type, x, y, r: d.radius, hp, maxHp: hp, speed: d.speed, damage: d.damage, attackTimer: 0, flash: 0, angle: 0 });
+  const hp = type === "boss"
+    ? d.hp * (1 + (g.zone - 1) * CONFIG.boss.hpPerZone)
+    : d.hp * (1 + g.level * bc.hpPerLevel) * (g.node === "elite" ? bc.eliteHp : 1);
+  const e = { type, x, y, r: d.radius, hp, maxHp: hp, speed: d.speed, damage: d.damage, attackTimer: 0, flash: 0, angle: 0 };
+  g.enemies.push(e);
+  return e;
 }
 
 function ejectCleaner() {
@@ -430,7 +445,7 @@ function clawTarget() {
   let target = null;
   let best = k.pickRange;
   for (const e of g.enemies.concat(g.cubes)) {
-    if (e.dead || e.thrown || e.held || dist(e, p) > reach) continue;
+    if (e.dead || e.thrown || e.held || e.type === "boss" || dist(e, p) > reach) continue;
     const d = Math.hypot(e.x - mouse.x, e.y - mouse.y);
     if (d < best) {
       best = d;
@@ -456,7 +471,7 @@ function clawImpact(e) {
     if (d <= k.impactRadius * mm("claw", "range") + o.r) {
       damageEnemy(o, k.impactDamage * dmg);
       o.stun = Math.max(o.stun || 0, stun);
-      if (chain && d > 0 && !o.thrown) {
+      if (chain && d > 0 && !o.thrown && o.type !== "boss") {
         o.thrown = { vx: ((o.x - e.x) / d) * CONFIG.chain.speed, vy: ((o.y - e.y) / d) * CONFIG.chain.speed, t: CONFIG.chain.time, chain: depth + 1, ignore: e };
       } else if (d > 0) {
         o.x += ((o.x - e.x) / d) * 24;
@@ -546,12 +561,13 @@ function update(dt) {
   g.shake = Math.max(0, g.shake - dt * 20);
   g.banner = Math.max(0, g.banner - dt);
   g.scrapPulse = Math.max(0, g.scrapPulse - dt);
-  updateWaves(dt);
+  updateBattle(dt);
   updatePlayer(dt);
   updateClaw(dt);
   updateSkills(dt);
   updateSludge(dt);
   updateCleaners(dt);
+  updateBoss(dt);
   updateEnemies(dt);
   updateScraps(dt);
   updateEffects(dt);
@@ -561,33 +577,6 @@ function update(dt) {
     g.beam = null;
     state = "over";
     overAt = performance.now();
-  }
-}
-
-function updateWaves(dt) {
-  const g = game;
-  const wc = CONFIG.waves;
-  if (g.toSpawn > 0) {
-    g.spawnTimer -= dt;
-    if (g.spawnTimer <= 0) {
-      spawnEnemy();
-      g.toSpawn--;
-      g.spawnTimer = wc.spawnInterval;
-    }
-  } else if (g.enemies.length === 0) {
-    g.breakTimer -= dt;
-    if (g.wave > 0 && g.upgradedWave !== g.wave && g.breakTimer <= wc.breakTime - wc.collectTime) {
-      g.upgradedWave = g.wave;
-      openUpgrade();
-      return;
-    }
-    if (g.breakTimer <= 0) {
-      g.wave++;
-      g.toSpawn = wc.baseCount + (g.wave - 1) * wc.countPerWave;
-      g.spawnTimer = 0;
-      g.breakTimer = wc.breakTime;
-      g.banner = 2;
-    }
   }
 }
 
@@ -765,6 +754,10 @@ function updateEnemies(dt) {
   for (const e of g.enemies) {
     e.flash = Math.max(0, e.flash - dt);
     if (e.held || e.thrown) continue;
+    if (e.type === "boss") {
+      e.stun = 0;
+      if (e.windup > 0 || e.charge) continue;
+    }
     if (e.stun > 0) {
       e.stun -= dt;
       e.angle += dt * 8;
@@ -852,6 +845,7 @@ function cleanup() {
     }
   }
   if (g.held && g.held.dead) g.held = null;
+  if (g.boss && g.boss.dead) g.boss = null;
   cleanupSkills();
   g.enemies = g.enemies.filter(e => !e.dead);
   g.cleaners = g.cleaners.filter(r => !r.dead);
@@ -980,7 +974,12 @@ function drawEnemy(e) {
   ctx.translate(e.x, e.y);
   ctx.rotate(e.angle);
   ctx.beginPath();
-  if (e.type === "drone") {
+  if (e.type === "boss") {
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI) / 4 + Math.PI / 8;
+      ctx.lineTo(Math.cos(a) * e.r, Math.sin(a) * e.r);
+    }
+  } else if (e.type === "drone") {
     ctx.moveTo(e.r, 0);
     ctx.lineTo(-e.r * 0.8, e.r * 0.8);
     ctx.lineTo(-e.r * 0.4, 0);
@@ -997,6 +996,18 @@ function drawEnemy(e) {
   ctx.lineWidth = 2;
   ctx.strokeStyle = "#2a0f14";
   ctx.stroke();
+  if (e.type === "boss") {
+    ctx.fillStyle = "#5a1a1a";
+    ctx.fillRect(-e.r * 0.55, -e.r * 0.55, e.r * 1.1, e.r * 1.1);
+    ctx.strokeStyle = "#2a0f14";
+    ctx.strokeRect(-e.r * 0.55, -e.r * 0.55, e.r * 1.1, e.r * 1.1);
+    ctx.fillStyle = e.windup > 0 ? "#ffffff" : "#ff4b4b";
+    ctx.beginPath();
+    ctx.arc(e.r * 0.35, 0, e.r * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#e8b931";
+    for (const y of [-e.r * 0.75, e.r * 0.6]) ctx.fillRect(-e.r * 0.4, y, e.r * 0.8, e.r * 0.15);
+  }
   if (e.type === "guard") {
     ctx.fillStyle = "#ffdf6b";
     ctx.beginPath();
@@ -1004,7 +1015,7 @@ function drawEnemy(e) {
     ctx.fill();
   }
   ctx.restore();
-  if (e.hp < e.maxHp) drawHpBar(e.x, e.y - e.r - 9, e.r * 2, e.hp / e.maxHp);
+  if (e.hp < e.maxHp && e.type !== "boss") drawHpBar(e.x, e.y - e.r - 9, e.r * 2, e.hp / e.maxHp);
 }
 
 function strokeBeam(b, width, color, alpha) {
@@ -1234,12 +1245,14 @@ function drawHud() {
   ctx.textBaseline = "top";
   ctx.font = `bold 20px ${FONT}`;
   ctx.fillStyle = "#ffffff";
-  ctx.fillText("웨이브 " + g.wave, W - 20, 18);
+  ctx.fillText("구역 " + g.zone, W - 20, 18);
   ctx.font = `bold 15px ${FONT}`;
   ctx.fillStyle = "#cfd6e0";
-  ctx.fillText("처치 " + g.kills, W - 20, 46);
+  const where = g.node === "boss" ? "보스전" : Math.min(g.step, CONFIG.route.nodesPerZone) + " / " + CONFIG.route.nodesPerZone + "칸";
+  ctx.fillText(where + " · 남은 적 " + (g.toSpawn + g.enemies.length), W - 20, 46);
+  ctx.fillText("처치 " + g.kills, W - 20, 68);
   ctx.fillStyle = g.scrapPulse > 0 ? "#ffe27a" : "#cfd6e0";
-  ctx.fillText("고철 " + g.scrap, W - 20, 68);
+  ctx.fillText("고철 " + g.scrap, W - 20, 90);
 
   const carrying = g.cleaners.reduce((n, r) => n + r.carry, 0);
   const y = H - 74;
@@ -1265,18 +1278,20 @@ function drawHud() {
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  drawBossBar();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
   if (g.banner > 0) {
     ctx.globalAlpha = clamp(g.banner, 0, 1);
-    ctx.font = `900 48px ${FONT}`;
+    ctx.font = `900 44px ${FONT}`;
     ctx.fillStyle = "#ffffff";
-    ctx.fillText("웨이브 " + g.wave, W / 2, 140);
+    ctx.fillText(g.bannerText, W / 2, 150);
     ctx.globalAlpha = 1;
-  } else if (state === "play" && g.toSpawn === 0 && g.enemies.length === 0) {
+  }
+  if (state === "play" && g.clearTimer >= 0) {
     ctx.font = `bold 18px ${FONT}`;
     ctx.fillStyle = "#cfd6e0";
-    const toUpgrade = g.breakTimer - (CONFIG.waves.breakTime - CONFIG.waves.collectTime);
-    const text = g.wave === 0 ? "곧 중앙 AI의 공격이 시작됩니다" : g.upgradedWave !== g.wave ? "웨이브 완료! 고철을 모으세요 · 강화 구역까지 " + Math.max(1, Math.ceil(toUpgrade)) + "초" : "다음 웨이브까지 " + Math.ceil(g.breakTimer) + "초";
-    ctx.fillText(text, W / 2, 40);
+    ctx.fillText("고철을 모으세요 · " + Math.max(1, Math.ceil(g.clearTimer)) + "초 뒤 다음 목적지", W / 2, 40);
   }
 }
 
@@ -1495,7 +1510,7 @@ function drawGameOver() {
   ctx.fillText("공장 정지", W / 2, 250);
   ctx.fillStyle = "#d7dce3";
   ctx.font = `20px ${FONT}`;
-  ctx.fillText("웨이브 " + g.wave + "  ·  처치 " + g.kills + "  ·  고철 " + g.scrap, W / 2, 330);
+  ctx.fillText("구역 " + g.zone + " · " + Math.max(1, g.step) + "번째 칸  ·  처치 " + g.kills + "  ·  고철 " + g.scrap, W / 2, 330);
   if (canRestart()) {
     drawPrompt("클릭하거나 스페이스를 눌러 다시 시작", 430);
     ctx.font = `15px ${FONT}`;
@@ -1527,6 +1542,7 @@ function draw() {
   drawScraps();
   drawCubes();
   drawCleaners();
+  drawBossTelegraph();
   drawEnemies();
   drawBeam();
   drawPlayer();

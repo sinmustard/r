@@ -35,9 +35,7 @@ function openUpgrade() {
 
 function closeUpgrade() {
   upgradeEl.hidden = true;
-  state = "play";
-  game.breakTimer = CONFIG.waves.afterUpgrade;
-  canvas.focus();
+  openRoute();
 }
 
 function installModule(skill, type) {
@@ -100,14 +98,14 @@ function renderUpgrade() {
   const carrying = g.cleaners.reduce((n, r) => n + r.carry, 0);
   upgradeEl.innerHTML =
     '<div class="up-panel" role="dialog" aria-label="강화 구역">' +
-    '<header><div><span class="cap">강화 구역</span><h2>웨이브 ' + g.wave + " 완료</h2></div>" +
+    '<header><div><span class="cap">구역 ' + g.zone + ' · 강화 구역</span><h2>모듈 정비</h2></div>' +
     '<div class="scrap">고철 <b>' + g.scrap + "</b>" + (carrying ? '<small>청소 로봇이 든 고철 ' + carrying + "개는 회수해야 쓸 수 있어요</small>" : "") + "</div></header>" +
     '<div class="up-body"><nav class="dock-list" aria-label="카트리지">' + dock + "</nav>" +
     '<section class="cartridge-panel"><h3>' + cart.name + ' <span class="key">' + cart.key + "</span><small>장착 " + slots.length + " / " + max + "</small></h3>" +
     '<div class="cartridge-portrait"><div class="cartridge-art" aria-hidden="true"></div><div class="cartridge-grid">' + grid + "</div></div>" + details + "</section>" +
     '<section class="module-list"><h3>모듈 개발</h3>' + cards + "</section></div>" +
     '<footer><span class="rule">같은 종류는 카트리지마다 하나만 · 모듈을 빼면 고철 절반을 돌려받아요</span>' +
-    '<button type="button" class="go" data-action="close">다음 웨이브 시작 (Enter)</button></footer></div>';
+    '<button type="button" class="go" data-action="close">정비 끝내고 출발 (Enter)</button></footer></div>';
 }
 
 upgradeEl.addEventListener("click", e => {
