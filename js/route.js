@@ -195,14 +195,18 @@ function finishBattle() {
     overAt = performance.now();
     return;
   }
-  if (g.node === "boss") {
+  const boss = g.node === "boss";
+  if (boss) {
     g.zone++;
     g.step = 0;
     g.lastNode = null;
+    g.unlockedNow = !g.specialUnlocked;
+    g.specialUnlocked = true;
   }
   g.node = null;
   g.clearTimer = -1;
-  openRoute();
+  if (boss) openUpgrade("boss");
+  else openRoute();
 }
 
 function updateBattle(dt) {

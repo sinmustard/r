@@ -1,4 +1,4 @@
-const VERSION = "0.18.2";
+const VERSION = "0.19";
 
 const CONFIG = {
   width: 1280,
@@ -16,6 +16,8 @@ const CONFIG = {
     basicCost: 6,
     specialCost: 12,
     recMul: 0.5,
+    bossCost: 0,
+    bossSpecials: 1,
     devMul: 2,
     refund: 0.5,
     recWeight: { damage: 4, cooldown: 4, range: 2.5, cost: 2, duration: 1.5, summonHp: 1.5, shield: 1.5, moveSpeed: 1, carry: 1, knockback: 1, slow: 1, special: 2 },

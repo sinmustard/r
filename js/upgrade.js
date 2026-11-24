@@ -52,6 +52,7 @@ function basePrice(type) {
 
 function offerPrice(offer) {
   const m = CONFIG.modules;
+  if (offer.kind === "boss") return m.bossCost;
   return Math.max(1, Math.round(basePrice(offer.type) * (offer.kind === "dev" ? m.devMul : m.recMul)));
 }
 
@@ -76,7 +77,8 @@ function hasType(skill, type) {
 }
 
 function offerProblem(offer, slot) {
-  if (maint.bought) return "이번 정비에서 이미 모듈을 획득했어요";
+  if (maint.bought) return maint.mode === "boss" ? "보스 보상을 이미 받았어요" : "이번 정비에서 이미 모듈을 획득했어요";
+  if (offer.type === "special" && !game.specialUnlocked) return "첫 보스를 쓰러뜨리면 전용 모듈이 열려요";
   if (hasType(offer.skill, offer.type)) return "같은 종류가 이미 장착돼 있어요";
   if (game.scrap < offerPrice(offer)) return "고철이 부족해요";
   if (!slotsOf(offer.skill).some(m => !m)) return "빈 슬롯이 없어요 · 회수로 자리를 만드세요";
@@ -84,14 +86,24 @@ function offerProblem(offer, slot) {
   return "";
 }
 
-function makeRecs() {
+function makeRecs(kind = "rec") {
   const pool = [];
   for (const c of CARTRIDGES) {
     for (const type of Object.keys(c.mods)) {
-      if (!hasType(c.id, type)) pool.push({ kind: "rec", skill: c.id, type });
+      if (type === "special" && !game.specialUnlocked) continue;
+      if (!hasType(c.id, type)) pool.push({ kind, skill: c.id, type });
     }
   }
   const out = [];
+  if (kind === "boss") {
+    for (let i = 0; i < CONFIG.modules.bossSpecials; i++) {
+      const sp = pool.filter(o => o.type === "special" && !out.some(x => x.skill === o.skill));
+      if (!sp.length) break;
+      const pick = sp[Math.floor(Math.random() * sp.length)];
+      out.push(pick);
+      pool.splice(pool.indexOf(pick), 1);
+    }
+  }
   while (out.length < 3 && pool.length) {
     const fresh = pool.filter(o => !out.some(x => x.skill === o.skill));
     const from = fresh.length ? fresh : pool;
@@ -110,17 +122,19 @@ function makeRecs() {
   return out;
 }
 
-function openUpgrade() {
+function openUpgrade(mode = "shop") {
   state = "upgrade";
   mouse.spray = false;
   game.beam = null;
+  maint.mode = mode;
   maint.tab = "rec";
   maint.page = 0;
-  maint.recs = makeRecs();
+  maint.recs = makeRecs(mode === "boss" ? "boss" : "rec");
   maint.bought = false;
   maint.sel = null;
   maint.hover = null;
-  maint.notice = "";
+  maint.notice = mode === "boss" && game.unlockedNow ? "전용 모듈이 열렸어요!" : "";
+  game.unlockedNow = false;
   maint.drag = null;
   maint.skill = maint.recs.length ? maint.recs[0].skill : "cleaner";
   renderUpgrade();
@@ -210,7 +224,7 @@ function describe() {
   } else if (t) {
     const problem = offerProblem(t);
     body = '<b class="mi-name">' + moduleName(t.skill, t.type) + '</b><span class="mi-kind">' + (t.type === "special" ? "전용 모듈" : "기본 모듈") + " · 대상 " + cartridgeOf(t.skill).name + "</span>" +
-      '<p class="mi-text">' + moduleText(t.skill, t.type) + '</p><p class="mi-price">가격 고철 <strong>' + offerPrice(t) + "</strong>개" + (t.kind === "dev" ? " (지정 개발 · 기본가 " + basePrice(t.type) + "의 " + CONFIG.modules.devMul + "배)" : " (추천 할인 · 기본가 " + basePrice(t.type) + ")") + "</p>" +
+      '<p class="mi-text">' + moduleText(t.skill, t.type) + '</p><p class="mi-price">가격 고철 <strong>' + offerPrice(t) + "</strong>개" + (t.kind === "dev" ? " (지정 개발 · 기본가 " + basePrice(t.type) + "의 " + CONFIG.modules.devMul + "배)" : t.kind === "boss" ? " (보스 보상)" : " (추천 할인 · 기본가 " + basePrice(t.type) + ")") + "</p>" +
       (problem ? '<p class="mi-bad">' + problem + "</p>" : '<p class="mi-ok">장착할 수 있어요</p>');
   }
   return '<div class="mi-head">' + cart.name + ' <span class="key">' + cart.key + "</span><small>장착 " + used + " / " + CONFIG.modules.slots + "</small></div>" + body;
@@ -236,7 +250,7 @@ function renderUpgrade() {
       '<img class="mt-icon" src="' + moduleIcon(o.skill, o.type) + '" alt="" draggable="false">' +
       '<b class="mt-name">' + moduleName(o.skill, o.type) + "</b>" +
       '<span class="mt-skill"><img src="assets/ui/skills/' + o.skill + '.png" alt="" draggable="false">' + cartridgeOf(o.skill).name + "</span>" +
-      '<span class="mt-price">' + (o.kind === "rec" ? "<s>" + basePrice(o.type) + "</s> " : "") + "고철 " + offerPrice(o) + (o.kind === "rec" ? ' <em class="mt-sale">추천 할인</em>' : "") + "</span></button>";
+      '<span class="mt-price">' + (o.kind !== "dev" ? "<s>" + basePrice(o.type) + "</s> " : "") + (o.kind === "boss" && !offerPrice(o) ? "무료" : "고철 " + offerPrice(o)) + (o.kind === "rec" ? ' <em class="mt-sale">추천 할인</em>' : o.kind === "boss" ? ' <em class="mt-sale">보스 보상</em>' : "") + "</span></button>";
   };
   const shown = offers.slice(first, first + 3);
   let cardsHtml = shown.length ? shown.map(card).join("") : '<div class="mt-empty" style="' + box(MAINT_BOX.empty) + '">추천할 모듈이 없어요</div>';
@@ -265,14 +279,17 @@ function renderUpgrade() {
   upgradeEl.innerHTML =
     '<div class="maint" style="width:' + width + "px;font-size:" + width / 1024 * 20 + 'px" role="dialog" aria-label="모듈 정비">' +
     '<img class="mt-bg" src="assets/ui/maintenance.jpg" alt="" draggable="false">' +
-    '<div class="mt-title" style="' + box(MAINT_BOX.title) + '"><b>모듈 정비</b><em class="mt-notice">' + maint.notice + '</em><span>고철 <strong>' + g.scrap + "</strong>개</span></div>" +
+    '<div class="mt-title" style="' + box(MAINT_BOX.title) + '"><b>' + (maint.mode === "boss" ? "보스 보상" : "모듈 정비") + "</b>" + '<em class="mt-notice">' + maint.notice + '</em><span>고철 <strong>' + g.scrap + "</strong>개</span></div>" +
     '<div class="mt-tabs" style="' + box(MAINT_BOX.tabs) + '">' +
-    '<button type="button" class="mt-tab' + (maint.tab === "rec" ? " on" : "") + '" data-tab="rec">추천 모듈 · 할인</button>' +
-    '<button type="button" class="mt-tab' + (maint.tab === "dev" ? " on" : "") + '" data-tab="dev">지정 개발 · 가격 ' + CONFIG.modules.devMul + '배</button></div>' +
+    (maint.mode === "boss"
+      ? '<span class="mt-tab on">보스 격파 보상 · 하나를 골라 장착하세요</span>'
+      : '<button type="button" class="mt-tab' + (maint.tab === "rec" ? " on" : "") + '" data-tab="rec">추천 모듈 · 할인</button>' +
+        '<button type="button" class="mt-tab' + (maint.tab === "dev" ? " on" : "") + '" data-tab="dev">지정 개발 · 가격 ' + CONFIG.modules.devMul + "배</button>") +
+    "</div>" +
     cardsHtml + board + slotsHtml +
     '<div class="mt-info" style="' + box(MAINT_BOX.info) + '">' + describe() + "</div>" +
     '<button type="button" class="mt-recycle' + (dragSlot ? " armed" : "") + '" data-recycle="1" style="' + box(MAINT_BOX.recycle) + '">' + recycleText + "</button>" +
-    '<button type="button" class="mt-go" data-go="1" style="' + box(MAINT_BOX.go) + '">' + (maint.bought ? "출발 (Enter)" : "그냥 출발 (Enter)") + "</button>" +
+    '<button type="button" class="mt-go" data-go="1" style="' + box(MAINT_BOX.go) + '">' + (maint.bought ? "출발 (Enter)" : maint.mode === "boss" ? "보상 건너뛰기 (Enter)" : "그냥 출발 (Enter)") + "</button>" +
     "</div>";
   if (maint.drag) upgradeEl.appendChild(maint.drag.ghost);
 }

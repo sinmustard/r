@@ -1168,3 +1168,9 @@ canvas:focus {
     transform: translate(1.5px, 1px) rotate(10deg);
   }
 }
+
+.mt-tabs span.mt-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
