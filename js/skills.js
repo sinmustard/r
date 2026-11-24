@@ -6,7 +6,7 @@ function ocMul() {
 }
 
 function scrapCost(base, skill) {
-  return Math.max(1, Math.round(base * mm(skill, "cost")));
+  return Math.max(1, Math.ceil(base * mm(skill, "cost") - 1e-9));
 }
 
 function payScrap(n, x, y) {
@@ -31,8 +31,7 @@ function compressScrap() {
   const a = p.aim;
   const x = clamp(p.x + Math.cos(a) * (p.r + k.radius + 18), k.radius, W - k.radius);
   const y = clamp(p.y + Math.sin(a) * (p.r + k.radius + 18), k.radius, H - k.radius);
-  const hp = k.hp * mm("compress", "duration");
-  g.cubes.push({ kind: "cube", x, y, r: k.radius, hp, maxHp: hp, life: k.life * mm("compress", "duration"), flash: 0, angle: 0 });
+  g.cubes.push({ kind: "cube", x, y, r: k.radius, hp: k.hp, maxHp: k.hp, life: k.life * mm("compress", "duration"), dmg: k.throwDamage * mm("compress", "damage"), flash: 0, angle: 0 });
   const free = g.cubes.filter(c => !c.held && !c.thrown && !c.dead);
   if (free.length > k.max) {
     free[0].dead = true;
@@ -48,7 +47,7 @@ function cubeImpact(c) {
   const k = CONFIG.cube;
   c.thrown = null;
   c.dead = true;
-  const dmg = k.throwDamage * mm("compress", "damage");
+  const dmg = c.dmg || k.throwDamage;
   for (const e of g.enemies) {
     if (e.dead || e.held) continue;
     const d = dist(e, c);
@@ -78,7 +77,7 @@ function placeMine() {
   const cost = scrapCost(k.cost, "mine");
   if (!payScrap(cost, p.x, p.y - 50)) return;
   const at = mechPoint(p, MECH.shutter[0], MECH.shutter[1] + 12);
-  g.mines.push({ x: at.x, y: at.y, r: k.radius, arm: k.armTime, blink: 0 });
+  g.mines.push({ x: at.x, y: at.y, r: k.radius, arm: k.armTime, blink: 0, dmg: k.damage * mm("mine", "damage"), radius: k.blastRadius * mm("mine", "range"), slow: modOn("mine", "slow") });
   g.mineCooldown = k.cooldown * mm("mine", "cooldown");
   addText(at.x, at.y - 24, "-" + cost + " 고철", "#cfd6e0");
 }
@@ -88,13 +87,15 @@ function explodeMine(m) {
   const k = CONFIG.mine;
   if (m.dead) return;
   m.dead = true;
-  const radius = k.blastRadius * mm("mine", "range");
-  const dmg = k.damage * mm("mine", "damage");
+  const radius = m.radius || k.blastRadius;
+  const dmg = m.dmg || k.damage;
   for (const e of g.enemies) {
     if (e.dead) continue;
     const d = dist(e, m);
     if (d <= radius + e.r) {
       damageEnemy(e, dmg);
+      if (m.slow) applySlow(e);
+      if (isBossLike(e)) continue;
       e.stun = Math.max(e.stun || 0, 0.4);
       if (!e.held && d > 0) {
         e.x += ((e.x - m.x) / d) * 36;
@@ -113,6 +114,7 @@ function startBoost() {
   const k = CONFIG.boost;
   if (g.boostCooldown > 0) return;
   g.boost = k.duration * mm("boost", "duration");
+  g.boostFx = { damage: mm("boost", "damage"), speed: mm("boost", "moveSpeed"), sweep: modOn("boost", "special") };
   g.boostCooldown = k.cooldown * mm("boost", "cooldown");
   for (const r of g.cleaners) burst(r.x, r.y, "#5ff0c8", 6, 100);
   addText(g.player.x, g.player.y - 50, "청소 가속!", "#5ff0c8");
@@ -123,6 +125,8 @@ function startOverclock() {
   const k = CONFIG.overclock;
   if (g.overclockCooldown > 0 || g.overclock > 0 || g.recoil > 0) return;
   g.overclock = k.duration * mm("overclock", "duration");
+  g.shield = modOn("overclock", "shield") ? g.player.maxHp * MODULE_TYPES.shield.ratio : 0;
+  g.ocSteam = modOn("overclock", "special");
   g.overclockCooldown = k.cooldown * mm("overclock", "cooldown");
   burst(g.player.x, g.player.y, "#ff9a3c", 24, 240);
   addText(g.player.x, g.player.y - 50, "오버클럭!", "#ff9a3c");
@@ -141,8 +145,9 @@ function updateSkills(dt) {
     if (g.overclock <= 0) {
       g.overclock = 0;
       g.recoil = CONFIG.overclock.recoil;
+      g.shield = 0;
       addText(g.player.x, g.player.y - 50, "과열 반동", "#9aa3ad");
-      if (modOn("overclock", "special")) emergencySteam();
+      if (g.ocSteam) emergencySteam();
     }
   } else {
     g.recoil = Math.max(0, g.recoil - dt);
@@ -320,7 +325,7 @@ function absorbScrap() {
   const p = g.player;
   let n = 0;
   for (const s of g.scraps) {
-    if (s.dead || dist(s, p) > CONFIG.absorb.range) continue;
+    if (s.dead || dist(s, p) > CONFIG.player.pickupRange * CONFIG.absorb.pickupMul) continue;
     s.dead = true;
     n++;
     const life = 0.35;
@@ -337,12 +342,13 @@ function emergencySteam() {
   const g = game;
   const k = CONFIG.steam;
   const p = g.player;
+  const range = CONFIG.player.pickupRange * k.pickupMul;
   for (const e of g.enemies) {
-    if (e.dead || e.held || e.type !== "drone") continue;
+    if (e.dead || e.held || !CONFIG.enemies[e.type] || !CONFIG.enemies[e.type].small) continue;
     const d = dist(e, p);
-    if (d > k.range || d === 0) continue;
-    e.x += ((e.x - p.x) / d) * k.push;
-    e.y += ((e.y - p.y) / d) * k.push;
+    if (d > range + e.r || d === 0) continue;
+    e.x = p.x + ((e.x - p.x) / d) * (range + e.r + 4);
+    e.y = p.y + ((e.y - p.y) / d) * (range + e.r + 4);
     e.x = clamp(e.x, e.r, W - e.r);
     e.y = clamp(e.y, e.r, H - e.r);
     e.stun = Math.max(e.stun || 0, k.stun);
@@ -354,13 +360,13 @@ function emergencySteam() {
     const life = rand(0.5, 1);
     g.particles.push({ x: cp.x, y: cp.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life, max: life, color: "#e6e8ec", size: rand(6, 12) });
   }
-  g.rings.push({ x: p.x, y: p.y, r: 0, max: k.range, life: 0.4, total: 0.4, color: "#e6e8ec" });
+  g.rings.push({ x: p.x, y: p.y, r: 0, max: range, life: 0.4, total: 0.4, color: "#e6e8ec" });
   addText(p.x, p.y - 70, "비상 배기!", "#e6e8ec");
 }
 
 function spawnPuddle(b) {
   const t = rand(0.15, 1);
-  game.puddles.push({ x: b.sx + (b.ex - b.sx) * t + rand(-8, 8), y: b.sy + (b.ey - b.sy) * t + rand(-8, 8), r: CONFIG.puddle.radius * rand(0.8, 1.2), life: CONFIG.puddle.life, total: CONFIG.puddle.life });
+  game.puddles.push({ x: b.sx + (b.ex - b.sx) * t + rand(-8, 8), y: b.sy + (b.ey - b.sy) * t + rand(-8, 8), r: CONFIG.puddle.radius * mm("sludge", "range") * rand(0.8, 1.2), life: CONFIG.puddle.life, total: CONFIG.puddle.life });
 }
 
 function inPuddle(e) {
@@ -368,10 +374,20 @@ function inPuddle(e) {
   return false;
 }
 
-function updateCleanerSpecials(dt, damage) {
+function applySlow(e) {
+  e.slowT = MODULE_TYPES.slow.time;
+}
+
+function slowMul(e) {
+  let m = 1;
+  if (e.slowT > 0) m = Math.min(m, 1 - MODULE_TYPES.slow.amount);
+  if (inPuddle(e)) m = Math.min(m, CONFIG.puddle.slow);
+  return m;
+}
+
+function updateCleanerSpecials(dt, dmgMul) {
   const g = game;
   const f = CONFIG.fusion;
-  const p = g.player;
   if (modOn("cleaner", "special")) {
     const pool = g.cleaners.filter(r => !r.dead && !r.fused && r.mode === "work" && r.launch <= 0);
     for (let i = 0; i < pool.length; i++) {
@@ -381,10 +397,15 @@ function updateCleanerSpecials(dt, damage) {
         if (a.dead || b.dead || a.fused || b.fused || dist(a, b) > a.r + b.r + 2) continue;
         a.fused = true;
         a.r = f.radius;
-        a.maxHp = (a.maxHp + b.maxHp) * f.hpMul;
-        a.hp = (a.hp + b.hp) * f.hpMul;
+        a.maxHp += b.maxHp;
+        a.hp += b.hp;
         a.carry += b.carry;
-        a.power = f.damageMul;
+        a.carryMax += b.carryMax;
+        a.dmg += b.dmg;
+        a.interval = (a.interval + b.interval) / 2;
+        a.speed = (a.speed + b.speed) / 2;
+        a.sight = Math.max(a.sight, b.sight);
+        a.reach = Math.max(a.reach, b.reach);
         a.x = (a.x + b.x) / 2;
         a.y = (a.y + b.y) / 2;
         b.dead = true;
@@ -398,22 +419,21 @@ function updateCleanerSpecials(dt, damage) {
     r.spinTimer = (r.spinTimer || 0) - dt;
     r.spinFx = Math.max(0, (r.spinFx || 0) - dt);
     if (r.mode !== "work" || r.spinTimer > 0) continue;
-    const range = r.r + f.spinRange;
+    const range = (r.r + r.reach) * f.spinRangeMul;
     const near = g.enemies.filter(e => !e.dead && !e.held && !e.thrown && dist(e, r) <= range + e.r);
     if (near.length < 2) continue;
-    for (const e of near) damageEnemy(e, damage * f.spinDamage * r.power);
-    r.spinTimer = f.spinInterval / (g.boost > 0 ? CONFIG.boost.speedMul : 1);
+    for (const e of near) damageEnemy(e, r.dmg * dmgMul);
+    r.spinTimer = f.spinInterval;
     r.spinFx = 0.25;
     burst(r.x, r.y, "#e8b931", 8, 160);
   }
-  if (g.boost > 0 && modOn("boost", "special")) {
-    for (const r of g.cleaners) {
-      if (r.dead || r.mode !== "return") continue;
-      for (const s of g.scraps) {
-        if (!s.dead && dist(r, s) < r.r + CONFIG.emergency.range) {
-          s.dead = true;
-          r.carry++;
-        }
+  for (const r of g.cleaners) {
+    if (r.dead || !r.sweep || r.mode !== "return") continue;
+    for (const s of g.scraps) {
+      if (r.carry >= r.carryMax) break;
+      if (!s.dead && dist(r, s) < r.r + CONFIG.emergency.range) {
+        s.dead = true;
+        r.carry++;
       }
     }
   }

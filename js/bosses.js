@@ -196,7 +196,7 @@ BOSS_DEFS["steel-factory"] = {
   patterns: {
     roll: b => chargeSteps(b, b.phase > 0 ? 2 : 1, 460, 0.8, 0.6, 40, 1.4),
     pour: () => makeAct(3.2, [], (dt, b, p, t) => {
-      moveToward(b, p.x, p.y, 150 * dt);
+      moveToward(b, p.x, p.y, 150 * slowMul(b) * dt);
       b.trail = (b.trail || 0) - dt;
       if (b.trail <= 0) {
         b.trail = 0.14;
@@ -344,7 +344,7 @@ BOSS_DEFS["chemical-factory"] = {
           });
         }]);
       }
-      return makeAct(1.9, ev, (dt, b, p) => moveToward(b, p.x, p.y, 40 * dt));
+      return makeAct(1.9, ev, (dt, b, p) => moveToward(b, p.x, p.y, 40 * slowMul(b) * dt));
     },
     waves: b => {
       const n = b.phase > 0 ? 3 : 2;
@@ -649,8 +649,8 @@ function updateBoss(dt) {
   b.idle -= dt;
   const d = dist(b, p);
   if (!def.still) {
-    if (d > 300) moveToward(b, p.x, p.y, 70 * dt);
-    else if (d < 170) moveToward(b, b.x * 2 - p.x, b.y * 2 - p.y, 50 * dt);
+    if (d > 300) moveToward(b, p.x, p.y, 70 * slowMul(b) * dt);
+    else if (d < 170) moveToward(b, b.x * 2 - p.x, b.y * 2 - p.y, 50 * slowMul(b) * dt);
     b.x = clamp(b.x, b.r, W - b.r);
     b.y = clamp(b.y, b.r, H - b.r);
   }

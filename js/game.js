@@ -135,7 +135,10 @@ function newGame() {
     cubeCooldown: 0,
     mineCooldown: 0,
     boost: 0,
+    boostFx: { damage: 1, speed: 1, sweep: false },
     boostCooldown: 0,
+    shield: 0,
+    ocSteam: false,
     overclock: 0,
     recoil: 0,
     overclockCooldown: 0,
@@ -386,8 +389,9 @@ function ejectCleaner() {
   const g = game;
   const c = CONFIG.cleaner;
   const p = g.player;
-  if (g.ejectCooldown > 0 || g.cleaners.length >= c.max) return;
+  if (g.ejectCooldown > 0 || cleanerCount() >= c.max) return;
   const hp = c.hp * mm("cleaner", "summonHp");
+  const reachMul = mm("cleaner", "range");
   const a = p.aim;
   const door = mechPoint(p, MECH.shutter[0], MECH.shutter[1]);
   g.cleaners.push({
@@ -400,6 +404,12 @@ function ejectCleaner() {
     hp,
     maxHp: hp,
     carry: 0,
+    carryMax: c.carryMax + (modOn("cleaner", "carry") ? MODULE_TYPES.carry.add : 0),
+    dmg: c.damage * mm("cleaner", "damage"),
+    sight: c.sightRange * reachMul,
+    reach: c.attackRange * reachMul,
+    speed: c.speed * mm("cleaner", "moveSpeed"),
+    interval: c.attackInterval,
     mode: "work",
     attackTimer: 0,
     bump: 0,
@@ -461,23 +471,33 @@ function clawImpact(e) {
   const g = game;
   const k = CONFIG.claw;
   const depth = e.thrown && e.thrown.chain ? e.thrown.chain : 0;
+  const hits = e.thrown && e.thrown.hits ? e.thrown.hits : new Set();
   const chain = modOn("claw", "special") && depth < CONFIG.chain.depth;
   const dmg = mm("claw", "damage") * ocMul() * Math.pow(CONFIG.chain.falloff, depth);
   const stun = k.stun * mm("claw", "duration");
+  const push = mm("claw", "knockback");
+  const slow = modOn("claw", "slow");
   e.thrown = null;
   e.stun = stun;
-  damageEnemy(e, k.selfDamage * dmg);
+  if (!hits.has(e)) {
+    hits.add(e);
+    damageEnemy(e, k.selfDamage * dmg);
+    if (slow) applySlow(e);
+  }
   for (const o of g.enemies) {
-    if (o === e || o.dead || o.held) continue;
+    if (o === e || o.dead || o.held || hits.has(o)) continue;
     const d = dist(o, e);
     if (d <= k.impactRadius * mm("claw", "range") + o.r) {
+      hits.add(o);
       damageEnemy(o, k.impactDamage * dmg);
+      if (slow) applySlow(o);
+      if (isBossLike(o)) continue;
       o.stun = Math.max(o.stun || 0, stun);
-      if (chain && d > 0 && !o.thrown && o.type !== "boss") {
-        o.thrown = { vx: ((o.x - e.x) / d) * CONFIG.chain.speed, vy: ((o.y - e.y) / d) * CONFIG.chain.speed, t: CONFIG.chain.time, chain: depth + 1, ignore: e };
+      if (chain && d > 0 && !o.thrown) {
+        o.thrown = { vx: ((o.x - e.x) / d) * CONFIG.chain.speed * push, vy: ((o.y - e.y) / d) * CONFIG.chain.speed * push, t: CONFIG.chain.time, chain: depth + 1, ignore: e, hits };
       } else if (d > 0) {
-        o.x += ((o.x - e.x) / d) * 24;
-        o.y += ((o.y - e.y) / d) * 24;
+        o.x += ((o.x - e.x) / d) * 24 * push;
+        o.y += ((o.y - e.y) / d) * 24 * push;
       }
     }
   }
@@ -528,11 +548,29 @@ function updateClaw(dt) {
 }
 
 function recallCleaners() {
-  for (const r of game.cleaners) r.mode = "return";
+  const g = game;
+  for (const r of g.cleaners) {
+    r.mode = "return";
+    if (g.boost > 0 && g.boostFx.sweep) r.sweep = true;
+  }
+}
+
+function cleanerCount() {
+  return game.cleaners.reduce((n, r) => n + (r.fused ? 2 : 1), 0);
+}
+
+function isBossLike(e) {
+  return e.type === "boss" || e.type === "clone";
 }
 
 function hitTarget(t, dmg) {
   const g = game;
+  if (t === g.player && g.shield > 0) {
+    const soak = Math.min(g.shield, dmg);
+    g.shield -= soak;
+    dmg -= soak;
+    burst(t.x, t.y, "#5ab0ff", 6, 120);
+  }
   t.hp -= dmg;
   t.flash = 0.12;
   if (t === g.player) {
@@ -647,9 +685,9 @@ function updateSludge(dt) {
   for (const e of g.enemies) {
     if (distToSegment(e.x, e.y, sx, sy, ex, ey) <= width / 2 + e.r) {
       damageEnemy(e, s.dps * mm("sludge", "damage") * ocMul() * dt);
-      if (!e.held) {
-        e.x += cos * s.push * dt;
-        e.y += sin * s.push * dt;
+      if (!e.held && !isBossLike(e)) {
+        e.x += cos * s.push * mm("sludge", "knockback") * dt;
+        e.y += sin * s.push * mm("sludge", "knockback") * dt;
       }
     }
   }
@@ -667,12 +705,14 @@ function updateCleaners(dt) {
   const p = g.player;
   const boosted = g.boost > 0;
   const quick = boosted ? CONFIG.boost.speedMul : 1;
-  const speed = c.speed * quick;
-  const interval = c.attackInterval / quick;
-  const damage = c.damage * mm("cleaner", "damage") * (boosted ? mm("boost", "damage") : 1);
-  const sight = c.sightRange * mm("cleaner", "range");
-  const reach = c.attackRange * mm("cleaner", "range");
+  const moveMul = boosted ? CONFIG.boost.speedMul * g.boostFx.speed : 1;
+  const dmgMul = boosted ? g.boostFx.damage : 1;
   g.cleaners.forEach((r, i) => {
+    const speed = r.speed * moveMul;
+    const interval = r.interval / quick;
+    const damage = r.dmg * dmgMul;
+    const sight = r.sight;
+    const reach = r.reach;
     r.flash = Math.max(0, r.flash - dt);
     r.bump = Math.max(0, r.bump - dt);
     r.attackTimer -= dt;
@@ -698,7 +738,7 @@ function updateCleaners(dt) {
       }
     } else {
       const enemy = nearest(g.enemies.filter(e => !e.held && !e.thrown), r, sight);
-      const nearScrap = r.carry < c.carryMax ? nearest(g.scraps, r, c.grabRange) : null;
+      const nearScrap = r.carry < r.carryMax ? nearest(g.scraps, r, c.grabRange) : null;
       if (nearScrap && (!enemy || dist(r, enemy) > dist(r, nearScrap) + 40)) {
         tx = nearScrap.x;
         ty = nearScrap.y;
@@ -706,7 +746,7 @@ function updateCleaners(dt) {
         r.angle = Math.atan2(enemy.y - r.y, enemy.x - r.x);
         if (dist(r, enemy) <= enemy.r + r.r + reach) {
           if (r.attackTimer <= 0) {
-            damageEnemy(enemy, damage * (r.power || 1));
+            damageEnemy(enemy, damage);
             r.attackTimer = interval;
             r.bump = 0.12;
             burst(enemy.x, enemy.y, "#e8f0f2", 3, 90);
@@ -716,7 +756,7 @@ function updateCleaners(dt) {
           ty = enemy.y;
         }
       } else {
-        const s = r.carry < c.carryMax ? nearest(g.scraps, r, sight) : null;
+        const s = r.carry < r.carryMax ? nearest(g.scraps, r, sight) : null;
         if (s) {
           tx = s.x;
           ty = s.y;
@@ -731,17 +771,17 @@ function updateCleaners(dt) {
       r.angle = Math.atan2(ty - r.y, tx - r.x);
       moveToward(r, tx, ty, speed * dt);
     }
-    if (r.carry < c.carryMax) {
+    if (r.carry < r.carryMax) {
       for (const s of g.scraps) {
         if (!s.dead && dist(r, s) < r.r + s.r + 4) {
           s.dead = true;
           r.carry++;
-          if (r.carry >= c.carryMax) break;
+          if (r.carry >= r.carryMax) break;
         }
       }
     }
   });
-  updateCleanerSpecials(dt, damage);
+  updateCleanerSpecials(dt, dmgMul);
   separate(g.cleaners.filter(r => !r.dead), 0.5);
   for (const r of g.cleaners) {
     pushOut(r, p);
@@ -755,6 +795,7 @@ function updateEnemies(dt) {
   const p = g.player;
   for (const e of g.enemies) {
     e.flash = Math.max(0, e.flash - dt);
+    if (e.slowT > 0) e.slowT -= dt;
     if (e.held || e.thrown) continue;
     if (e.type === "boss" || e.type === "clone") {
       e.stun = 0;
@@ -778,7 +819,7 @@ function updateEnemies(dt) {
     }
     e.angle = Math.atan2(target.y - e.y, target.x - e.x);
     if (best - e.r > 3) {
-      moveToward(e, target.x, target.y, e.speed * (inPuddle(e) ? CONFIG.puddle.slow : 1) * dt);
+      moveToward(e, target.x, target.y, e.speed * slowMul(e) * dt);
     } else if (e.attackTimer <= 0) {
       e.attackTimer = CONFIG.enemyAttackInterval;
       hitTarget(target, e.damage);
@@ -930,7 +971,7 @@ function drawCleaners() {
       ctx.strokeStyle = r.spinFx > 0 ? "#ffe27a" : "rgba(232,185,49,0.7)";
       ctx.lineWidth = r.spinFx > 0 ? 4 : 2;
       ctx.beginPath();
-      ctx.arc(0, 0, r.spinFx > 0 ? r.r + CONFIG.fusion.spinRange * (1 - r.spinFx / 0.25) : r.r + 7, 0, Math.PI * 2);
+      ctx.arc(0, 0, r.spinFx > 0 ? r.r + ((r.r + r.reach) * CONFIG.fusion.spinRangeMul - r.r) * (1 - r.spinFx / 0.25) : r.r + 7, 0, Math.PI * 2);
       ctx.stroke();
     }
     if (game.boost > 0) {
@@ -1269,7 +1310,11 @@ function drawHud() {
   const g = game;
   const p = g.player;
   const c = CONFIG.cleaner;
-  drawBar(20, 20, 260, 22, p.hp / p.maxHp, p.hp / p.maxHp > 0.3 ? "#4caf6a" : "#e05252", "내구도", Math.ceil(p.hp) + " / " + p.maxHp);
+  drawBar(20, 20, 260, 22, p.hp / p.maxHp, p.hp / p.maxHp > 0.3 ? "#4caf6a" : "#e05252", "내구도", Math.ceil(p.hp) + " / " + p.maxHp + (g.shield > 0 ? " + 보호막 " + Math.ceil(g.shield) : ""));
+  if (g.shield > 0) {
+    ctx.fillStyle = "rgba(90, 176, 255, 0.75)";
+    ctx.fillRect(20, 38, 260 * clamp(g.shield / p.maxHp, 0, 1), 4);
+  }
   drawBar(20, 50, 260, 16, g.tank / CONFIG.sludge.tank, g.tank <= 0 || g.tankLocked ? "#5b6170" : "#8fa832", g.tankLocked ? "폐수 탱크 (버튼을 뗐다가 다시)" : "폐수 탱크", Math.floor(g.tank) + "%");
 
   ctx.textAlign = "right";
@@ -1292,7 +1337,7 @@ function drawHud() {
   const slots = [
     ["좌클릭", "집게팔", g.held ? "잡는 중 · 클릭해 던지기" : "적 · 큐브 잡기", g.clawCooldown / (CONFIG.claw.cooldown * mm("claw", "cooldown")), g.held ? "#e8b931" : null],
     ["우클릭", "오염 폐수", "누르고 있기 · " + Math.floor(g.tank) + "%", 0, g.beam ? "#8fa832" : null],
-    ["Q", "청소 로봇", "출동 " + g.cleaners.length + " / " + c.max, g.ejectCooldown / (c.cooldown * mm("cleaner", "cooldown")), null],
+    ["Q", "청소 로봇", "출동 " + cleanerCount() + " / " + c.max, g.ejectCooldown / (c.cooldown * mm("cleaner", "cooldown")), null],
     ["R", "로봇 회수", "고철 " + carrying + "개 수거 중", 0, null],
     ["E", "압축 지뢰", "고철 " + scrapCost(CONFIG.mine.cost, "mine") + " · 설치 " + g.mines.length + "/" + CONFIG.mine.max, g.mineCooldown / (CONFIG.mine.cooldown * mm("mine", "cooldown")), null],
     ["F", "고철 압축", "고철 " + scrapCost(CONFIG.cube.cost, "compress") + " · 큐브 " + g.cubes.length + "/" + CONFIG.cube.max, g.cubeCooldown / (CONFIG.cube.cooldown * mm("compress", "cooldown")), null],
@@ -1577,6 +1622,14 @@ function draw() {
   drawEnemies();
   drawBeam();
   drawPlayer();
+  if (game.shield > 0) {
+    const p = game.player;
+    ctx.strokeStyle = "rgba(90, 176, 255, " + (0.45 + Math.sin(game.time * 6) * 0.15) + ")";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r + 16, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   drawClaw();
   drawParticles();
   drawRings();

@@ -1,4 +1,4 @@
-const VERSION = "0.12.2";
+const VERSION = "0.13";
 
 const CONFIG = {
   width: 1280,
@@ -12,15 +12,15 @@ const CONFIG = {
   boost: { cooldown: 15, duration: 5, speedMul: 1.7 },
   overclock: { cooldown: 25, duration: 6, recoil: 3, boostMul: 2, recoilMul: 0.5 },
   modules: { slots: 4, basicCost: 6, specialCost: 12, devMul: 2, refund: 0.5 },
-  fusion: { radius: 16, hpMul: 1.2, damageMul: 2.2, spinRange: 42, spinInterval: 0.6, spinDamage: 0.8 },
+  fusion: { radius: 16, spinRangeMul: 2, spinInterval: 0.6 },
   puddle: { interval: 0.1, radius: 26, life: 2.5, slow: 0.5 },
   chain: { speed: 380, time: 0.25, falloff: 0.6, depth: 2 },
-  absorb: { range: 260 },
+  absorb: { pickupMul: 3 },
   emergency: { range: 40 },
-  steam: { range: 160, push: 90, stun: 1 },
+  steam: { pickupMul: 2, stun: 1 },
   enemyAttackInterval: 0.8,
   enemies: {
-    drone: { name: "소형 드론", radius: 13, speed: 120, hp: 30, damage: 10, scrap: 1, color: "#e0525a" },
+    drone: { name: "소형 드론", radius: 13, speed: 120, hp: 30, damage: 10, scrap: 1, color: "#e0525a", small: true },
     guard: { name: "경비 로봇", radius: 22, speed: 70, hp: 120, damage: 22, scrap: 3, color: "#b44ad8" },
     boss: { name: "구역 관리 기체", radius: 40, speed: 55, hp: 1400, damage: 35, scrap: 25, color: "#c0392b" },
     clone: { name: "복제 프로그램", radius: 30, speed: 0, hp: 120, damage: 30, scrap: 0, color: "#ff3b6b" }
