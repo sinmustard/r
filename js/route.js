@@ -8,7 +8,7 @@ const NODE_INFO = {
   elite: { name: "정예 전투", tag: "전투", text: "경비 로봇이 많고 더 단단하다. 대신 고철을 더 많이 얻는다.", color: "#b44ad8" },
   event: { name: "사건", tag: "사건", text: "무슨 일이 기다리고 있을지 모른다.", color: "#4fa3e0" },
   upgrade: { name: "강화 구역", tag: "강화", text: "고철로 모듈을 개발하고 카트리지에 장착한다.", color: "#e8b931" },
-  boss: { name: "구역 관리 기체", tag: "보스", text: "이 구역을 지키는 중앙 AI의 대형 기체. 쓰러뜨리면 다음 구역으로 간다.", color: "#ff6b3c" }
+  boss: { name: "구역 보스", tag: "보스", text: "이 구역을 지키는 중앙 AI의 대형 기체. 쓰러뜨리면 다음 구역으로 간다.", color: "#ff6b3c" }
 };
 
 const EVENTS = [
@@ -72,6 +72,11 @@ const EVENTS = [
   }
 ];
 
+function bossInfo(zone = game.zone) {
+  const list = CONFIG.bosses;
+  return list[Math.min(zone, list.length) - 1];
+}
+
 function showBanner(text) {
   game.bannerText = text;
   game.banner = 2;
@@ -124,7 +129,7 @@ function renderRoute() {
   const track = Array.from({ length: rc.nodesPerZone }, (_, i) => '<i class="' + (i < g.step ? "done" : i === g.step ? "now" : "") + '"></i>').join("") +
     '<b class="' + (atBoss ? "now" : "") + '">보스</b>';
   const cards = routeChoices.map((t, i) => {
-    const n = NODE_INFO[t];
+    const n = t === "boss" ? Object.assign({}, NODE_INFO.boss, { name: bossInfo().name }) : NODE_INFO[t];
     return '<button type="button" class="route-card" data-action="pick" data-i="' + i + '" style="--c:' + n.color + '">' +
       '<span class="num">' + (i + 1) + '</span><span class="tag">' + n.tag + "</span><b>" + n.name + '</b><span class="d">' + n.text + "</span></button>";
   }).join("");
@@ -156,7 +161,11 @@ function startBattle(t) {
   canvas.focus();
   if (t === "boss") {
     g.toSpawn = 0;
+    const info = bossInfo();
     const b = spawnEnemy("boss");
+    b.r = info.radius;
+    b.sprite = "boss-" + info.sprite;
+    b.name = info.name;
     b.x = W / 2;
     b.y = -b.r;
     b.summon = CONFIG.boss.summonEvery;
@@ -164,7 +173,7 @@ function startBattle(t) {
     b.windup = 0;
     b.charge = null;
     g.boss = b;
-    showBanner("보스 등장 · " + CONFIG.enemies.boss.name);
+    showBanner("보스 등장 · " + info.name);
   } else {
     g.toSpawn = bc.baseCount + g.level * bc.countPerLevel;
     g.spawnTimer = 1;
@@ -280,7 +289,7 @@ function drawBossBar() {
   ctx.font = `bold 13px ${FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
-  ctx.fillText(CONFIG.enemies.boss.name + " · 구역 " + game.zone, W / 2, 80);
+  ctx.fillText((b.name || CONFIG.enemies.boss.name) + " · 구역 " + game.zone, W / 2, 80);
 }
 
 function openEvent() {

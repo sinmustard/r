@@ -1,4 +1,4 @@
-const VERSION = "0.7";
+const VERSION = "0.8";
 
 const CONFIG = {
   width: 1280,
@@ -26,6 +26,14 @@ const CONFIG = {
   },
   battle: { spawnInterval: 0.5, baseCount: 6, countPerLevel: 2, hpPerLevel: 0.08, guardFromLevel: 2, guardRatio: 0.2, eliteGuardRatio: 0.5, eliteHp: 1.3, collectTime: 3 },
   route: { nodesPerZone: 6, minChoices: 2, maxChoices: 3 },
+  bosses: [
+    { name: "철강공장", sprite: "steel-factory", radius: 46 },
+    { name: "자동차공장", sprite: "auto-factory", radius: 48 },
+    { name: "화학공장", sprite: "chemical-factory", radius: 46 },
+    { name: "집행자", sprite: "executioner", radius: 50 },
+    { name: "중앙 AI", sprite: "central-ai", radius: 44 }
+  ],
+  bossDrawScale: 3.3,
   boss: { hpPerZone: 0.5, summonEvery: 6, summonCount: 4, chargeEvery: 4.5, chargeWindup: 0.7, chargeSpeed: 420, chargeTime: 0.55, chargeRange: 520, chargeDamage: 45 },
   events: { repairCost: 8, repairHp: 120, pileBig: 12, pileHurt: 20, pileSmall: 6, crateScrap: 8, crateHp: 60 },
   scrap: { radius: 7, life: 25 }

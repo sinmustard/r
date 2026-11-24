@@ -968,7 +968,28 @@ function drawEnemies() {
   for (const e of game.enemies) if (!e.held && !e.thrown) drawEnemy(e);
 }
 
+function drawBossSprite(e) {
+  const img = SPRITES[e.sprite];
+  const size = e.r * CONFIG.bossDrawScale;
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.beginPath();
+  ctx.ellipse(0, size * 0.38, size * 0.42, size * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const shake = e.windup > 0 ? rand(-2, 2) : 0;
+  if (e.flash > 0) ctx.filter = "brightness(2.2)";
+  else if (e.windup > 0 && Math.floor(performance.now() / 80) % 2 === 0) ctx.filter = "sepia(1) saturate(5) hue-rotate(-25deg)";
+  ctx.drawImage(img, -size / 2 + shake, -size / 2, size, size);
+  ctx.filter = "none";
+  ctx.restore();
+}
+
 function drawEnemy(e) {
+  if (e.type === "boss" && e.sprite && SPRITES[e.sprite]) {
+    drawBossSprite(e);
+    return;
+  }
   const color = e.flash > 0 ? "#ffffff" : CONFIG.enemies[e.type].color;
   ctx.save();
   ctx.translate(e.x, e.y);
@@ -1569,7 +1590,8 @@ function frame(now) {
 Promise.all([
   loadSprite("body", "assets/mech-body.png"),
   loadSprite("legLeft", "assets/mech-leg-left.png"),
-  loadSprite("legRight", "assets/mech-leg-right.png")
+  loadSprite("legRight", "assets/mech-leg-right.png"),
+  ...CONFIG.bosses.map(b => loadSprite("boss-" + b.sprite, "assets/bosses/game/" + b.sprite + ".png"))
 ]).then(() => {
   last = performance.now();
   requestAnimationFrame(frame);
