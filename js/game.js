@@ -304,7 +304,7 @@ function onPress(code) {
     return;
   }
   if (state === "upgrade") {
-    if (code === "Enter") closeUpgrade();
+    if (code === "Enter" && !upgradeEl.contains(document.activeElement)) closeUpgrade();
     return;
   }
   if (state === "route" || state === "event") {

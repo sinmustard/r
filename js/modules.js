@@ -94,12 +94,12 @@ const CARTRIDGES = [
 
 function newCartridges() {
   const out = {};
-  for (const c of CARTRIDGES) out[c.id] = [];
+  for (const c of CARTRIDGES) out[c.id] = new Array(CONFIG.modules.slots).fill(null);
   return out;
 }
 
 function modOn(skill, type) {
-  return !!game.cartridges && game.cartridges[skill].includes(type);
+  return !!game.cartridges && game.cartridges[skill].some(m => m && m.type === type);
 }
 
 function mm(skill, type) {

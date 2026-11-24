@@ -1,4 +1,4 @@
-const VERSION = "0.11";
+const VERSION = "0.12";
 
 const CONFIG = {
   width: 1280,
@@ -11,7 +11,7 @@ const CONFIG = {
   mine: { cost: 4, cooldown: 0.6, max: 3, radius: 12, trigger: 22, blastRadius: 95, damage: 90, armTime: 0.5, detonateHold: 0.4 },
   boost: { cooldown: 15, duration: 5, speedMul: 1.7 },
   overclock: { cooldown: 25, duration: 6, recoil: 3, boostMul: 2, recoilMul: 0.5 },
-  modules: { slots: 4, basicCost: 6, specialCost: 12, refund: 0.5 },
+  modules: { slots: 4, basicCost: 6, specialCost: 12, devMul: 2, refund: 0.5 },
   fusion: { radius: 16, hpMul: 1.2, damageMul: 2.2, spinRange: 42, spinInterval: 0.6, spinDamage: 0.8 },
   puddle: { interval: 0.1, radius: 26, life: 2.5, slow: 0.5 },
   chain: { speed: 380, time: 0.25, falloff: 0.6, depth: 2 },

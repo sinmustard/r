@@ -1,8 +1,27 @@
 const upgradeEl = document.getElementById("upgrade");
-let upgradeSel = "cleaner";
-let upgradeInspect = null;
-const BOARD_SLOTS = [[23.2, 31.5], [41.5, 31.5], [59.1, 31.5], [77.1, 31.5], [30.4, 67.2], [50.2, 67.2], [70.1, 67.2]];
-const CARTRIDGE_SLOTS = [[33.3, 31.3], [66.9, 31.3], [33.3, 58.3], [66.9, 58.3]];
+const MAINT_BOX = {
+  title: [60, 55, 900, 75],
+  tabs: [55, 175, 915, 42],
+  cards: [[65, 280, 260, 315], [380, 280, 260, 315], [690, 280, 260, 315]],
+  list: [65, 280, 885, 315],
+  board: [65, 660, 895, 130],
+  info: [420, 860, 535, 275],
+  recycle: [65, 1210, 890, 100],
+  go: [65, 1375, 890, 65],
+  slots: [[88, 875], [235, 875], [88, 1018], [235, 1018]],
+  slotSize: 105
+};
+
+const maint = {
+  tab: "rec",
+  skill: "cleaner",
+  recs: [],
+  bought: false,
+  sel: null,
+  hover: null,
+  notice: "",
+  drag: null
+};
 
 function cartridgeOf(skill) {
   return CARTRIDGES.find(c => c.id === skill);
@@ -22,113 +41,398 @@ function moduleText(skill, type) {
   return type === "special" ? m.text : m;
 }
 
-function moduleCost(type) {
+function basePrice(type) {
   return type === "special" ? CONFIG.modules.specialCost : CONFIG.modules.basicCost;
+}
+
+function offerPrice(offer) {
+  return basePrice(offer.type) * (offer.kind === "dev" ? CONFIG.modules.devMul : 1);
+}
+
+function box(b) {
+  return "left:" + b[0] / 10.24 + "%;top:" + b[1] / 15.36 + "%;width:" + b[2] / 10.24 + "%;height:" + b[3] / 15.36 + "%";
+}
+
+function slotsOf(skill) {
+  return game.cartridges[skill];
+}
+
+function hasType(skill, type) {
+  return slotsOf(skill).some(m => m && m.type === type);
+}
+
+function offerProblem(offer, slot) {
+  if (maint.bought) return "이번 정비에서 이미 모듈을 획득했어요";
+  if (hasType(offer.skill, offer.type)) return "같은 종류가 이미 장착돼 있어요";
+  if (game.scrap < offerPrice(offer)) return "고철이 부족해요";
+  if (!slotsOf(offer.skill).some(m => !m)) return "빈 슬롯이 없어요 · 회수로 자리를 만드세요";
+  if (slot !== undefined && slotsOf(offer.skill)[slot]) return "빈 슬롯에 놓아 주세요";
+  return "";
+}
+
+function makeRecs() {
+  const pool = [];
+  for (const c of CARTRIDGES) {
+    for (const type of Object.keys(c.mods)) {
+      if (!hasType(c.id, type)) pool.push({ kind: "rec", skill: c.id, type });
+    }
+  }
+  const out = [];
+  while (out.length < 3 && pool.length) {
+    const fresh = pool.filter(o => !out.some(x => x.skill === o.skill));
+    const from = fresh.length ? fresh : pool;
+    const pick = from[Math.floor(Math.random() * from.length)];
+    out.push(pick);
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  return out;
 }
 
 function openUpgrade() {
   state = "upgrade";
   mouse.spray = false;
   game.beam = null;
-  upgradeInspect = null;
+  maint.tab = "rec";
+  maint.recs = makeRecs();
+  maint.bought = false;
+  maint.sel = null;
+  maint.hover = null;
+  maint.notice = "";
+  maint.drag = null;
+  maint.skill = maint.recs.length ? maint.recs[0].skill : "cleaner";
   renderUpgrade();
   upgradeEl.hidden = false;
+  upgradeEl.scrollTop = 0;
 }
 
 function closeUpgrade() {
+  endDrag();
   upgradeEl.hidden = true;
   openRoute();
 }
 
-function installModule(skill, type) {
-  const g = game;
-  const slots = g.cartridges[skill];
-  const cost = moduleCost(type);
-  if (slots.length >= CONFIG.modules.slots || slots.includes(type) || g.scrap < cost) return;
-  g.scrap -= cost;
-  slots.push(type);
-  upgradeInspect = slots.length - 1;
+function buyOffer(offer, slot) {
+  const problem = offerProblem(offer, slot);
+  if (problem) {
+    maint.notice = problem;
+    renderUpgrade();
+    return false;
+  }
+  const slots = slotsOf(offer.skill);
+  const at = slot !== undefined ? slot : slots.findIndex(m => !m);
+  const price = offerPrice(offer);
+  game.scrap -= price;
+  slots[at] = { type: offer.type, paid: price };
+  maint.bought = true;
+  maint.sel = null;
+  maint.skill = offer.skill;
+  maint.hover = { kind: "slot", skill: offer.skill, slot: at };
+  maint.notice = moduleName(offer.skill, offer.type) + " 장착 완료 · 이제 출발하세요";
+  renderUpgrade();
+  return true;
+}
+
+function refundOf(skill, slot) {
+  const m = slotsOf(skill)[slot];
+  return m ? Math.floor(m.paid * CONFIG.modules.refund) : 0;
+}
+
+function recycleSlot(skill, slot) {
+  const slots = slotsOf(skill);
+  const m = slots[slot];
+  if (!m) return;
+  const back = refundOf(skill, slot);
+  game.scrap += back;
+  slots[slot] = null;
+  maint.sel = null;
+  maint.hover = null;
+  maint.notice = moduleName(skill, m.type) + " 회수 · 고철 " + back + "개 환급";
   renderUpgrade();
 }
 
-function removeModule(skill, index) {
-  const g = game;
-  const slots = g.cartridges[skill];
-  const type = slots[index];
-  if (!type) return;
-  slots.splice(index, 1);
-  g.scrap += Math.floor(moduleCost(type) * CONFIG.modules.refund);
-  upgradeInspect = null;
+function moveSlot(skill, from, to) {
+  const slots = slotsOf(skill);
+  if (from === to || !slots[from] || slots[to]) return;
+  slots[to] = slots[from];
+  slots[from] = null;
+  maint.sel = null;
+  maint.hover = { kind: "slot", skill, slot: to };
   renderUpgrade();
+}
+
+function currentOffers() {
+  if (maint.tab === "rec") return maint.recs;
+  return Object.keys(cartridgeOf(maint.skill).mods).map(type => ({ kind: "dev", skill: maint.skill, type }));
+}
+
+function offerKey(o) {
+  return o.kind + ":" + o.skill + ":" + o.type;
+}
+
+function describe() {
+  const t = maint.drag ? maint.drag.item : maint.hover || maint.sel;
+  const cart = cartridgeOf(maint.skill);
+  const used = slotsOf(maint.skill).filter(Boolean).length;
+  let body = '<p class="mi-hint">모듈 위에 마우스를 올리면 효과와 가격이 보여요. 카드를 아래 빈 슬롯으로 끌어 놓거나, 카드를 누른 뒤 빈 슬롯을 눌러 장착해요.</p>';
+  if (t && t.kind === "slot") {
+    const m = slotsOf(t.skill)[t.slot];
+    if (m) {
+      body = '<b class="mi-name">' + moduleName(t.skill, m.type) + '</b><span class="mi-kind">' + (m.type === "special" ? "전용 모듈" : "기본 모듈") + " · 장착됨</span>" +
+        '<p class="mi-text">' + moduleText(t.skill, m.type) + '</p><p class="mi-price">회수하면 고철 <strong>' + refundOf(t.skill, t.slot) + "</strong>개 환급</p>";
+    }
+  } else if (t) {
+    const problem = offerProblem(t);
+    body = '<b class="mi-name">' + moduleName(t.skill, t.type) + '</b><span class="mi-kind">' + (t.type === "special" ? "전용 모듈" : "기본 모듈") + " · 대상 " + cartridgeOf(t.skill).name + "</span>" +
+      '<p class="mi-text">' + moduleText(t.skill, t.type) + '</p><p class="mi-price">가격 고철 <strong>' + offerPrice(t) + "</strong>개" + (t.kind === "dev" ? " (지정 개발 2배)" : "") + "</p>" +
+      (problem ? '<p class="mi-bad">' + problem + "</p>" : '<p class="mi-ok">장착할 수 있어요</p>');
+  }
+  return '<div class="mi-head">' + cart.name + ' <span class="key">' + cart.key + "</span><small>장착 " + used + " / " + CONFIG.modules.slots + "</small></div>" + body;
 }
 
 function renderUpgrade() {
   const g = game;
-  const cart = cartridgeOf(upgradeSel);
-  const slots = g.cartridges[cart.id];
-  const max = CONFIG.modules.slots;
-  const dock = CARTRIDGES.map((c, i) => {
-    const used = g.cartridges[c.id].length;
-    const pips = Array.from({ length: max }, (_, k) => '<i class="' + (k < used ? "on" : "") + '"></i>').join("");
-    const [x, y] = BOARD_SLOTS[i];
-    return '<button type="button" class="mb-slot' + (c.id === upgradeSel ? " sel" : "") + '" data-action="dock" data-id="' + c.id + '" style="left:' + x + "%;top:" + y + '%" title="' + c.name + " (" + c.key + ')">' +
-      '<img src="assets/ui/skills/' + c.id + '.png" alt="' + c.name + '"><span class="pips">' + pips + '</span><span class="key">' + c.key + "</span></button>";
+  const width = Math.min(window.innerWidth * 0.94, 700);
+  const target = maint.drag ? maint.drag.item : maint.sel;
+  const targetSkill = target && target.kind !== "slot" ? target.skill : null;
+  const offers = currentOffers();
+  const card = (o, i) => {
+    const problem = offerProblem(o);
+    const sel = maint.sel && maint.sel.kind !== "slot" && offerKey(maint.sel) === offerKey(o);
+    return '<button type="button" class="mt-card' + (o.type === "special" ? " special" : "") + (sel ? " sel" : "") + (problem ? " off" : "") + '" data-offer="' + i + '"' +
+      (maint.tab === "rec" ? ' style="' + box(MAINT_BOX.cards[i]) + '"' : "") + ">" +
+      '<img class="mt-icon" src="' + moduleIcon(o.skill, o.type) + '" alt="" draggable="false">' +
+      '<b class="mt-name">' + moduleName(o.skill, o.type) + "</b>" +
+      '<span class="mt-skill"><img src="assets/ui/skills/' + o.skill + '.png" alt="" draggable="false">' + cartridgeOf(o.skill).name + "</span>" +
+      '<span class="mt-price">고철 ' + offerPrice(o) + "</span></button>";
+  };
+  const cardsHtml = maint.tab === "rec"
+    ? (offers.length ? offers.map(card).join("") : '<div class="mt-empty" style="' + box(MAINT_BOX.list) + '">추천할 모듈이 없어요</div>')
+    : '<div class="mt-list" style="' + box(MAINT_BOX.list) + '">' + offers.map(card).join("") + "</div>";
+  const board = '<div class="mt-board" style="' + box(MAINT_BOX.board) + '">' + CARTRIDGES.map(c => {
+    const used = slotsOf(c.id).filter(Boolean).length;
+    return '<button type="button" class="mt-cart' + (c.id === maint.skill ? " cur" : "") + (c.id === targetSkill ? " target" : "") + '" data-skill="' + c.id + '" title="' + c.name + " (" + c.key + ')">' +
+      '<img src="assets/ui/skills/' + c.id + '.png" alt="' + c.name + '" draggable="false"><span class="mt-used">' + used + "/" + CONFIG.modules.slots + "</span></button>";
+  }).join("") + "</div>";
+  const slots = slotsOf(maint.skill);
+  const slotsHtml = MAINT_BOX.slots.map(([x, y], i) => {
+    const m = slots[i];
+    const canDrop = target && target.kind !== "slot" && target.skill === maint.skill && !m && !offerProblem(target, i);
+    const canMove = target && target.kind === "slot" && target.skill === maint.skill && !m;
+    const sel = maint.sel && maint.sel.kind === "slot" && maint.sel.skill === maint.skill && maint.sel.slot === i;
+    return '<button type="button" class="mt-slot' + (m ? " full" : "") + (m && m.type === "special" ? " special" : "") + (canDrop || canMove ? " drop" : "") + (sel ? " sel" : "") + '" data-slot="' + i + '" style="' + box([x, y, MAINT_BOX.slotSize, MAINT_BOX.slotSize]) + '">' +
+      (m ? '<img src="' + moduleIcon(maint.skill, m.type) + '" alt="' + moduleName(maint.skill, m.type) + '" draggable="false">' : "") + "</button>";
   }).join("");
-  const grid = CARTRIDGE_SLOTS.map(([x, y], i) => {
-    const t = slots[i];
-    const pos = ' style="left:' + x + "%;top:" + y + '%"';
-    if (!t) return '<div class="cartridge-slot empty"' + pos + "></div>";
-    return '<button type="button" class="cartridge-slot' + (t === "special" ? " modified" : "") + (upgradeInspect === i ? " sel" : "") +
-      '" data-action="inspect" data-slot="' + i + '"' + pos + ' title="' + moduleName(cart.id, t) + '"><img src="' + moduleIcon(cart.id, t) + '" alt=""></button>';
-  }).join("");
-  const inspected = upgradeInspect !== null ? slots[upgradeInspect] : null;
-  const details = inspected
-    ? '<div class="module-details"><b>' + moduleName(cart.id, inspected) + "</b><p>" + moduleText(cart.id, inspected) + "</p>" +
-      '<button type="button" data-action="remove">빼기 (고철 ' + Math.floor(moduleCost(inspected) * CONFIG.modules.refund) + "개 돌려받기)</button></div>"
-    : '<div class="module-details hint">장착한 모듈을 누르면 설명을 볼 수 있어요. 빈 칸은 오른쪽에서 모듈을 개발하면 채워져요.</div>';
-  const cards = Object.keys(cart.mods).map(type => {
-    const installed = slots.includes(type);
-    const cost = moduleCost(type);
-    const full = slots.length >= max;
-    const poor = g.scrap < cost;
-    const ok = !installed && !full && !poor;
-    const status = installed ? "장착됨" : full ? "슬롯 가득" : poor ? "고철 부족" : "개발 · 장착";
-    return '<button type="button" class="module-card' + (type === "special" ? " special" : "") + (installed ? " owned" : "") +
-      '" data-action="develop" data-type="' + type + '"' + (ok ? "" : " disabled") + ">" +
-      '<img src="' + moduleIcon(cart.id, type) + '" alt="">' +
-      '<span class="body"><b>' + moduleName(cart.id, type) + "</b><em>" + (type === "special" ? "전용 모듈" : "기본 모듈") + '</em><span class="d">' + moduleText(cart.id, type) + "</span></span>" +
-      '<span class="cost">' + status + "<br><strong>고철 " + cost + "</strong></span></button>";
-  }).join("");
-  const carrying = g.cleaners.reduce((n, r) => n + r.carry, 0);
+  const dragSlot = maint.drag && maint.drag.item.kind === "slot" ? maint.drag.item : maint.sel && maint.sel.kind === "slot" ? maint.sel : null;
+  const recycleText = dragSlot ? "여기에 놓거나 누르면 회수 · 고철 " + refundOf(dragSlot.skill, dragSlot.slot) + "개 환급" : "장착한 모듈을 여기로 끌어 놓으면 회수해요";
   upgradeEl.innerHTML =
-    '<div class="up-panel" role="dialog" aria-label="강화 구역">' +
-    '<header><div><span class="cap">구역 ' + g.zone + ' · 강화 구역</span><h2>모듈 정비</h2></div>' +
-    '<div class="scrap">고철 <b>' + g.scrap + "</b>" + (carrying ? '<small>청소 로봇이 든 고철 ' + carrying + "개는 회수해야 쓸 수 있어요</small>" : "") + "</div></header>" +
-    '<div class="up-body"><nav class="dock-list" aria-label="카트리지"><div class="motherboard"><img class="mb-art" src="assets/ui/motherboard.png" alt="">' + dock + '</div><p class="mb-caption">메인보드에서 정비할 카트리지를 고르세요</p></nav>' +
-    '<section class="cartridge-panel"><h3>' + cart.name + ' <span class="key">' + cart.key + "</span><small>장착 " + slots.length + " / " + max + "</small></h3>" +
-    '<div class="cartridge-frame"><img class="cf-art" src="assets/ui/cartridge.png" alt="">' + grid + "</div>" + details + "</section>" +
-    '<section class="module-list"><h3>모듈 개발</h3>' + cards + "</section></div>" +
-    '<footer><span class="rule">같은 종류는 카트리지마다 하나만 · 모듈을 빼면 고철 절반을 돌려받아요</span>' +
-    '<button type="button" class="go" data-action="close">정비 끝내고 출발 (Enter)</button></footer></div>';
+    '<div class="maint" style="width:' + width + "px;font-size:" + width / 1024 * 20 + 'px" role="dialog" aria-label="모듈 정비">' +
+    '<img class="mt-bg" src="assets/ui/maintenance.jpg" alt="" draggable="false">' +
+    '<div class="mt-title" style="' + box(MAINT_BOX.title) + '"><b>모듈 정비</b><span>고철 <strong>' + g.scrap + "</strong>개</span></div>" +
+    '<div class="mt-tabs" style="' + box(MAINT_BOX.tabs) + '">' +
+    '<button type="button" class="mt-tab' + (maint.tab === "rec" ? " on" : "") + '" data-tab="rec">추천 모듈</button>' +
+    '<button type="button" class="mt-tab' + (maint.tab === "dev" ? " on" : "") + '" data-tab="dev">지정 개발 · 가격 2배</button></div>' +
+    (maint.notice ? '<div class="mt-notice" style="' + box([65, 228, 885, 40]) + '">' + maint.notice + "</div>" : "") +
+    cardsHtml + board + slotsHtml +
+    '<div class="mt-info" style="' + box(MAINT_BOX.info) + '">' + describe() + "</div>" +
+    '<button type="button" class="mt-recycle' + (dragSlot ? " armed" : "") + '" data-recycle="1" style="' + box(MAINT_BOX.recycle) + '">' + recycleText + "</button>" +
+    '<button type="button" class="mt-go" data-go="1" style="' + box(MAINT_BOX.go) + '">' + (maint.bought ? "출발 (Enter)" : "그냥 출발 (Enter)") + "</button>" +
+    "</div>";
+  if (maint.drag) upgradeEl.appendChild(maint.drag.ghost);
 }
 
-upgradeEl.addEventListener("click", e => {
-  const b = e.target.closest("[data-action]");
-  if (!b || b.disabled || state !== "upgrade") return;
-  const a = b.dataset.action;
-  if (a === "dock") {
-    upgradeSel = b.dataset.id;
-    upgradeInspect = null;
-    renderUpgrade();
-  } else if (a === "inspect") {
-    const i = Number(b.dataset.slot);
-    upgradeInspect = upgradeInspect === i ? null : i;
-    renderUpgrade();
-  } else if (a === "develop") {
-    installModule(upgradeSel, b.dataset.type);
-  } else if (a === "remove") {
-    removeModule(upgradeSel, upgradeInspect);
-  } else if (a === "close") {
-    closeUpgrade();
+function itemFromEl(el) {
+  const offerEl = el.closest("[data-offer]");
+  if (offerEl) return currentOffers()[Number(offerEl.dataset.offer)];
+  const slotEl = el.closest("[data-slot]");
+  if (slotEl && slotsOf(maint.skill)[Number(slotEl.dataset.slot)]) return { kind: "slot", skill: maint.skill, slot: Number(slotEl.dataset.slot) };
+  return null;
+}
+
+function dropOn(item, el) {
+  if (!el) return false;
+  const slotEl = el.closest("[data-slot]");
+  if (item.kind === "slot") {
+    if (el.closest("[data-recycle]")) {
+      recycleSlot(item.skill, item.slot);
+      return true;
+    }
+    if (slotEl && item.skill === maint.skill && !slotsOf(maint.skill)[Number(slotEl.dataset.slot)]) {
+      moveSlot(item.skill, item.slot, Number(slotEl.dataset.slot));
+      return true;
+    }
+    return false;
   }
+  if (slotEl && item.skill === maint.skill) return buyOffer(item, Number(slotEl.dataset.slot));
+  return false;
+}
+
+function tap(el) {
+  if (el.closest("[data-go]")) {
+    closeUpgrade();
+    return;
+  }
+  const tabEl = el.closest("[data-tab]");
+  if (tabEl) {
+    maint.tab = tabEl.dataset.tab;
+    maint.sel = null;
+    maint.hover = null;
+    renderUpgrade();
+    return;
+  }
+  const cartEl = el.closest("[data-skill]");
+  if (cartEl) {
+    maint.skill = cartEl.dataset.skill;
+    if (maint.sel && maint.sel.kind === "slot") maint.sel = null;
+    renderUpgrade();
+    return;
+  }
+  if (el.closest("[data-recycle]")) {
+    if (maint.sel && maint.sel.kind === "slot") recycleSlot(maint.sel.skill, maint.sel.slot);
+    return;
+  }
+  const slotEl = el.closest("[data-slot]");
+  if (slotEl) {
+    const i = Number(slotEl.dataset.slot);
+    const m = slotsOf(maint.skill)[i];
+    if (!m && maint.sel && maint.sel.kind !== "slot") {
+      maint.skill = maint.sel.skill;
+      buyOffer(maint.sel, i);
+      return;
+    }
+    if (!m && maint.sel && maint.sel.kind === "slot") {
+      moveSlot(maint.sel.skill, maint.sel.slot, i);
+      return;
+    }
+    if (m) {
+      const same = maint.sel && maint.sel.kind === "slot" && maint.sel.slot === i && maint.sel.skill === maint.skill;
+      maint.sel = same ? null : { kind: "slot", skill: maint.skill, slot: i };
+      maint.hover = maint.sel;
+      renderUpgrade();
+    }
+    return;
+  }
+  const item = itemFromEl(el);
+  if (item) {
+    const same = maint.sel && maint.sel.kind !== "slot" && offerKey(maint.sel) === offerKey(item);
+    maint.sel = same ? null : item;
+    maint.hover = maint.sel;
+    if (maint.sel) maint.skill = item.skill;
+    maint.notice = "";
+    renderUpgrade();
+  }
+}
+
+function endDrag() {
+  const d = maint.drag;
+  if (!d) return;
+  if (d.ghost.parentNode) d.ghost.parentNode.removeChild(d.ghost);
+  cancelAnimationFrame(d.raf);
+  maint.drag = null;
+}
+
+let pressInfo = null;
+
+upgradeEl.addEventListener("pointerdown", e => {
+  if (state !== "upgrade" || e.button !== 0) return;
+  pressInfo = { x: e.clientX, y: e.clientY, item: itemFromEl(e.target), el: e.target };
+});
+
+window.addEventListener("pointermove", e => {
+  if (state !== "upgrade") return;
+  if (!maint.drag && pressInfo && pressInfo.item && Math.hypot(e.clientX - pressInfo.x, e.clientY - pressInfo.y) > 6) {
+    const item = pressInfo.item;
+    if (item.kind !== "slot" && maint.bought) return;
+    const ghost = document.createElement("img");
+    ghost.src = item.kind === "slot" ? moduleIcon(item.skill, slotsOf(item.skill)[item.slot].type) : moduleIcon(item.skill, item.type);
+    ghost.className = "mt-ghost";
+    maint.drag = { item, ghost, x: e.clientX, y: e.clientY, hoverSkill: null, hoverAt: 0, raf: 0 };
+    maint.sel = null;
+    maint.notice = "";
+    if (item.kind !== "slot") maint.hover = item;
+    renderUpgrade();
+    const loop = () => {
+      const dd = maint.drag;
+      if (!dd) return;
+      if (dd.y < 70) upgradeEl.scrollTop -= 14;
+      else if (dd.y > window.innerHeight - 70) upgradeEl.scrollTop += 14;
+      if (dd.hoverSkill && dd.hoverSkill !== maint.skill && performance.now() - dd.hoverAt > 350) {
+        maint.skill = dd.hoverSkill;
+        renderUpgrade();
+      }
+      dd.raf = requestAnimationFrame(loop);
+    };
+    maint.drag.raf = requestAnimationFrame(loop);
+  }
+  const dd = maint.drag;
+  if (dd) {
+    dd.x = e.clientX;
+    dd.y = e.clientY;
+    dd.ghost.style.left = e.clientX + "px";
+    dd.ghost.style.top = e.clientY + "px";
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const cartEl = under && under.closest("[data-skill]");
+    const skill = cartEl ? cartEl.dataset.skill : null;
+    if (skill !== dd.hoverSkill) {
+      dd.hoverSkill = skill;
+      dd.hoverAt = performance.now();
+    }
+  }
+});
+
+window.addEventListener("pointerup", e => {
+  if (state !== "upgrade") {
+    pressInfo = null;
+    return;
+  }
+  const d = maint.drag;
+  if (d) {
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const item = d.item;
+    endDrag();
+    if (!dropOn(item, under)) {
+      const overSlot = under && under.closest("[data-slot]");
+      if (item.kind === "slot") maint.notice = "";
+      else if (overSlot && item.skill !== maint.skill) maint.notice = cartridgeOf(item.skill).name + " 카트리지에만 장착할 수 있어요";
+      else if (!overSlot) maint.notice = "슬롯 밖에 놓아 취소했어요";
+      renderUpgrade();
+    }
+    pressInfo = null;
+    return;
+  }
+  if (pressInfo && upgradeEl.contains(pressInfo.el)) tap(pressInfo.el);
+  pressInfo = null;
+});
+
+upgradeEl.addEventListener("pointerover", e => {
+  if (state !== "upgrade" || maint.drag) return;
+  const item = itemFromEl(e.target);
+  if (item && JSON.stringify(maint.hover) !== JSON.stringify(item)) {
+    maint.hover = item;
+    const info = upgradeEl.querySelector(".mt-info");
+    if (info) info.innerHTML = describe();
+  }
+});
+
+upgradeEl.addEventListener("focusin", e => {
+  if (state !== "upgrade" || maint.drag) return;
+  const item = itemFromEl(e.target);
+  if (item) {
+    maint.hover = item;
+    const info = upgradeEl.querySelector(".mt-info");
+    if (info) info.innerHTML = describe();
+  }
+});
+
+upgradeEl.addEventListener("keydown", e => {
+  if (state !== "upgrade" || (e.key !== "Enter" && e.key !== " ")) return;
+  const b = e.target.closest("button");
+  if (b && upgradeEl.contains(b)) {
+    e.preventDefault();
+    e.stopPropagation();
+    tap(b);
+  }
+});
+
+window.addEventListener("resize", () => {
+  if (state === "upgrade") renderUpgrade();
 });
