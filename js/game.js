@@ -230,6 +230,13 @@ function canRestart() {
   return state === "over" && performance.now() - overAt > 800;
 }
 
+function resultButtonRects() {
+  return [
+    { x: W / 2 - 270, y: 420, w: 250, h: 62 },
+    { x: W / 2 + 20, y: 420, w: 250, h: 62 }
+  ];
+}
+
 function goTitle() {
   routeEl.hidden = true;
   upgradeEl.hidden = true;
@@ -373,7 +380,13 @@ window.addEventListener("mousedown", e => {
     return;
   }
   if (state === "over") {
-    if (canRestart()) startGame();
+    if (!canRestart()) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width * W;
+    const y = (e.clientY - rect.top) / rect.height * H;
+    const buttons = resultButtonRects();
+    if (inRect(buttons[0], x, y)) startGame();
+    else if (inRect(buttons[1], x, y)) goTitle();
     return;
   }
   if (state === "pause") {
@@ -1759,10 +1772,12 @@ function drawGameOver() {
   ctx.font = `bold 18px ${FONT}`;
   ctx.fillText("누적 클리어 " + clearCount() + "회", W / 2, 370);
   if (canRestart()) {
-    drawPrompt("클릭하거나 스페이스를 눌러 다시 시작", 430);
+    const buttons = resultButtonRects();
+    drawTitleButton(buttons[0], "다시 시작", inRect(buttons[0], mouse.x, mouse.y));
+    drawTitleButton(buttons[1], "메인화면", inRect(buttons[1], mouse.x, mouse.y));
     ctx.font = `15px ${FONT}`;
     ctx.fillStyle = "#9aa3ad";
-    ctx.fillText("Esc를 누르면 시작 화면으로", W / 2, 474);
+    ctx.fillText("Space / Enter 다시 시작 · Esc 메인화면", W / 2, 516);
   }
 }
 
