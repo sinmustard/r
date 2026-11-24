@@ -85,7 +85,7 @@ canvas {
 
 .overlay .up-body {
   display: grid;
-  grid-template-columns: 210px 1fr 1.3fr;
+  grid-template-columns: 400px 250px 1fr;
   gap: 16px;
   padding: 16px 22px;
 }
@@ -529,4 +529,98 @@ canvas:focus {
   color: #171a20;
   border-color: #e8b931;
   font-weight: 800;
+}
+
+.overlay .motherboard {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+}
+
+.overlay .mb-art,
+.overlay .cf-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.overlay .mb-slot {
+  position: absolute;
+  width: 11.5%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.overlay .mb-slot img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.overlay .mb-slot:hover {
+  border-color: rgba(232, 185, 49, 0.6);
+}
+
+.overlay .mb-slot.sel {
+  border-color: #e8b931;
+  box-shadow: 0 0 0 2px #171a20, 0 0 14px 3px rgba(232, 185, 49, 0.8);
+}
+
+.overlay .mb-slot .key {
+  position: absolute;
+  left: 50%;
+  bottom: -16px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+.overlay .mb-slot .pips {
+  position: absolute;
+  left: 50%;
+  top: -9px;
+  transform: translateX(-50%);
+}
+
+.overlay .mb-slot .pips i {
+  width: 8px;
+  height: 4px;
+}
+
+.overlay .mb-caption {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #6b717c;
+  text-align: center;
+}
+
+.overlay .cartridge-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1122 / 1402;
+}
+
+.overlay .cartridge-frame .cartridge-slot {
+  position: absolute;
+  width: 22.8%;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 2px solid transparent;
+  padding: 3px;
+}
+
+.overlay .cartridge-frame .cartridge-slot.empty {
+  border: 0;
+}
+
+.overlay .cartridge-frame .cartridge-slot.modified {
+  border-color: #ff9a3c;
 }

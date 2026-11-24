@@ -1,6 +1,8 @@
 const upgradeEl = document.getElementById("upgrade");
 let upgradeSel = "cleaner";
 let upgradeInspect = null;
+const BOARD_SLOTS = [[23.2, 31.5], [41.5, 31.5], [59.1, 31.5], [77.1, 31.5], [30.4, 67.2], [50.2, 67.2], [70.1, 67.2]];
+const CARTRIDGE_SLOTS = [[33.3, 31.3], [66.9, 31.3], [33.3, 58.3], [66.9, 58.3]];
 
 function cartridgeOf(skill) {
   return CARTRIDGES.find(c => c.id === skill);
@@ -65,17 +67,19 @@ function renderUpgrade() {
   const cart = cartridgeOf(upgradeSel);
   const slots = g.cartridges[cart.id];
   const max = CONFIG.modules.slots;
-  const dock = CARTRIDGES.map(c => {
+  const dock = CARTRIDGES.map((c, i) => {
     const used = g.cartridges[c.id].length;
-    const pips = Array.from({ length: max }, (_, i) => '<i class="' + (i < used ? "on" : "") + '"></i>').join("");
-    return '<button type="button" class="circuit-dock' + (c.id === upgradeSel ? " sel" : "") + '" data-action="dock" data-id="' + c.id + '">' +
-      '<span class="key">' + c.key + '</span><span class="nm">' + c.name + '</span><span class="pips">' + pips + "</span></button>";
+    const pips = Array.from({ length: max }, (_, k) => '<i class="' + (k < used ? "on" : "") + '"></i>').join("");
+    const [x, y] = BOARD_SLOTS[i];
+    return '<button type="button" class="mb-slot' + (c.id === upgradeSel ? " sel" : "") + '" data-action="dock" data-id="' + c.id + '" style="left:' + x + "%;top:" + y + '%" title="' + c.name + " (" + c.key + ')">' +
+      '<img src="assets/ui/skills/' + c.id + '.png" alt="' + c.name + '"><span class="pips">' + pips + '</span><span class="key">' + c.key + "</span></button>";
   }).join("");
-  const grid = Array.from({ length: max }, (_, i) => {
+  const grid = CARTRIDGE_SLOTS.map(([x, y], i) => {
     const t = slots[i];
-    if (!t) return '<div class="cartridge-slot empty">+</div>';
+    const pos = ' style="left:' + x + "%;top:" + y + '%"';
+    if (!t) return '<div class="cartridge-slot empty"' + pos + "></div>";
     return '<button type="button" class="cartridge-slot' + (t === "special" ? " modified" : "") + (upgradeInspect === i ? " sel" : "") +
-      '" data-action="inspect" data-slot="' + i + '" title="' + moduleName(cart.id, t) + '"><img src="' + moduleIcon(cart.id, t) + '" alt=""></button>';
+      '" data-action="inspect" data-slot="' + i + '"' + pos + ' title="' + moduleName(cart.id, t) + '"><img src="' + moduleIcon(cart.id, t) + '" alt=""></button>';
   }).join("");
   const inspected = upgradeInspect !== null ? slots[upgradeInspect] : null;
   const details = inspected
@@ -100,9 +104,9 @@ function renderUpgrade() {
     '<div class="up-panel" role="dialog" aria-label="강화 구역">' +
     '<header><div><span class="cap">구역 ' + g.zone + ' · 강화 구역</span><h2>모듈 정비</h2></div>' +
     '<div class="scrap">고철 <b>' + g.scrap + "</b>" + (carrying ? '<small>청소 로봇이 든 고철 ' + carrying + "개는 회수해야 쓸 수 있어요</small>" : "") + "</div></header>" +
-    '<div class="up-body"><nav class="dock-list" aria-label="카트리지">' + dock + "</nav>" +
+    '<div class="up-body"><nav class="dock-list" aria-label="카트리지"><div class="motherboard"><img class="mb-art" src="assets/ui/motherboard.png" alt="">' + dock + '</div><p class="mb-caption">메인보드에서 정비할 카트리지를 고르세요</p></nav>' +
     '<section class="cartridge-panel"><h3>' + cart.name + ' <span class="key">' + cart.key + "</span><small>장착 " + slots.length + " / " + max + "</small></h3>" +
-    '<div class="cartridge-portrait"><div class="cartridge-art" aria-hidden="true"></div><div class="cartridge-grid">' + grid + "</div></div>" + details + "</section>" +
+    '<div class="cartridge-frame"><img class="cf-art" src="assets/ui/cartridge.png" alt="">' + grid + "</div>" + details + "</section>" +
     '<section class="module-list"><h3>모듈 개발</h3>' + cards + "</section></div>" +
     '<footer><span class="rule">같은 종류는 카트리지마다 하나만 · 모듈을 빼면 고철 절반을 돌려받아요</span>' +
     '<button type="button" class="go" data-action="close">정비 끝내고 출발 (Enter)</button></footer></div>';
