@@ -60,6 +60,11 @@ function updateHazards(dt) {
   const g = game;
   const p = g.player;
   for (const h of g.hazards) {
+    const o = h.owner;
+    if (o && !h.started && (o.dead || o.hp <= 0 || o.held || o.thrown || o.stun > 0)) {
+      h.dead = true;
+      continue;
+    }
     h.t += dt;
     if (h.move) h.move(h, dt);
     const live = h.t >= h.warn;
@@ -673,10 +678,8 @@ function updateBoss(dt) {
   const b = g.boss;
   const p = g.player;
   if (!b || b.dead) {
-    if (g.hazards.length || g.bossShots.length) {
-      g.hazards = [];
-      g.bossShots = [];
-    }
+    updateHazards(dt);
+    updateShots(dt);
     updateClones(dt);
     return;
   }
@@ -835,6 +838,11 @@ function drawShot(s) {
   } else {
     ctx.translate(s.x, s.y);
     ctx.rotate(s.angle || 0);
+  }
+  if (s.draw) {
+    s.draw(s);
+    ctx.restore();
+    return;
   }
   if (s.kind === "block") {
     ctx.fillStyle = "#ff7a1a";

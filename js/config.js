@@ -1,4 +1,4 @@
-const VERSION = "0.14";
+const VERSION = "0.15";
 
 const CONFIG = {
   width: 1280,
@@ -22,10 +22,39 @@ const CONFIG = {
   enemies: {
     drone: { name: "소형 드론", radius: 13, speed: 120, hp: 30, damage: 10, scrap: 1, color: "#e0525a", small: true },
     guard: { name: "경비 로봇", radius: 22, speed: 70, hp: 120, damage: 22, scrap: 3, color: "#b44ad8" },
+    tow: { name: "견인봇", radius: 14, speed: 110, hp: 45, damage: 10, scrap: 1, color: "#e8b931", small: true, look: true, legs: 4 },
+    blocker: { name: "차단봇", radius: 22, speed: 60, hp: 140, damage: 18, scrap: 3, color: "#c0392b", look: true, legs: 6 },
+    shooter: { name: "고철 투사봇", radius: 15, speed: 85, hp: 50, damage: 8, scrap: 2, color: "#9aa3ad", small: true, look: true, legs: 4 },
+    stamp: { name: "출근 도장 프레스", radius: 21, speed: 70, hp: 120, damage: 15, scrap: 3, color: "#8a5a2b", look: true, legs: 6 },
+    ironcart: { name: "쇳덩이 운반봇", radius: 19, speed: 140, hp: 90, damage: 12, scrap: 3, color: "#ff7a1a", look: true, legs: 6 },
+    rusher: { name: "급발진봇", radius: 17, speed: 95, hp: 75, damage: 12, scrap: 2, color: "#6fa8dc", look: true, legs: 4 },
+    tire: { name: "타이어 굴림봇", radius: 21, speed: 60, hp: 110, damage: 12, scrap: 3, color: "#3a3640", look: true, legs: 6 },
+    leak: { name: "누수 점검봇", radius: 15, speed: 80, hp: 60, damage: 8, scrap: 2, color: "#7fd13b", small: true, look: true, legs: 4 },
+    reactor: { name: "반응통봇", radius: 15, speed: 110, hp: 40, damage: 8, scrap: 2, color: "#5fbf3a", small: true, look: true, legs: 4 },
+    demolisher: { name: "철거봇", radius: 23, speed: 55, hp: 160, damage: 18, scrap: 4, color: "#e8b931", look: true, legs: 6 },
+    relay: { name: "명령 중계봇", radius: 15, speed: 70, hp: 70, damage: 6, scrap: 3, color: "#7fd3ff", small: true, look: true, legs: 4 },
+    glitch: { name: "오류 복제봇", radius: 14, speed: 115, hp: 55, damage: 10, scrap: 2, color: "#3ff0ff", small: true, look: true, legs: 4 },
+    cursor: { name: "삭제 커서", radius: 14, speed: 60, hp: 60, damage: 0, scrap: 2, color: "#ff5fd2", small: true, look: true },
     boss: { name: "구역 관리 기체", radius: 40, speed: 55, hp: 1400, damage: 35, scrap: 25, color: "#c0392b" },
     clone: { name: "복제 프로그램", radius: 30, speed: 0, hp: 120, damage: 30, scrap: 0, color: "#ff3b6b" }
   },
-  battle: { spawnInterval: 0.5, baseCount: 6, countPerLevel: 2, hpPerLevel: 0.08, guardFromLevel: 2, guardRatio: 0.2, eliteGuardRatio: 0.5, eliteHp: 1.3, collectTime: 3 },
+  enemyAi: {
+    buffMul: 1.35,
+    tow: { range: 230, wind: 0.6, dash: 0.36, speed: 720, damage: 14, pull: 40, stuck: 1.3 },
+    glitch: { blink: 110, every: 2.2, exposed: 0.8, ghostMul: 0.5 },
+    blocker: { len: 110, width: 70, wind: 0.8, damage: 26, stuck: 1.4, cool: 1.2, guardArc: 1.1, guardMul: 0.35 },
+    shooter: { near: 220, far: 380, aimTime: 0.7, shotSpeed: 430, damage: 14, reload: 1.6 },
+    stamp: { range: 120, radius: 58, wind: 0.9, damage: 30, stuck: 1.3, cool: 1 },
+    ironcart: { range: 130, radius: 62, brake: 0.45, pourTime: 2.2, dps: 22, hot: 3, emptySpeed: 0.55 },
+    rusher: { range: 340, near: 160, wind: 0.7, dash: 0.42, speed: 920, damage: 22, stuck: 1, cool: 1.5 },
+    tire: { near: 240, far: 400, aimTime: 0.6, count: 3, gap: 0.35, shotSpeed: 300, damage: 12, cool: 2.2 },
+    leak: { every: 0.55, radius: 24, life: 3, dps: 10, max: 30 },
+    reactor: { trigger: 40, fuse: 1, radius: 85, damage: 32, enemyDamage: 60 },
+    demolisher: { range: 320, radius: 62, wind: 1, flight: 0.7, damage: 28, reel: 1.4, cool: 1.6 },
+    relay: { range: 220, near: 200, far: 300, stun: 1.5 },
+    cursor: { near: 220, far: 320, wind: 1.1, size: 150, damage: 28, cool: 2.6 }
+  },
+  battle: { spawnInterval: 0.5, baseCount: 6, countPerLevel: 2, hpPerLevel: 0.08, eliteHp: 1.3, collectTime: 3 },
   route: { nodesPerZone: 6, minChoices: 2, maxChoices: 3 },
   bosses: [
     { name: "철강공장", sprite: "steel-factory", radius: 46 },

@@ -4,8 +4,8 @@ let routeEvent = null;
 let routeResult = null;
 
 const NODE_INFO = {
-  battle: { name: "전투", tag: "전투", text: "중앙 AI 드론 무리와 싸운다. 처치한 적에게서 고철을 얻는다.", color: "#e05252" },
-  elite: { name: "정예 전투", tag: "전투", text: "경비 로봇이 많고 더 단단하다. 대신 고철을 더 많이 얻는다.", color: "#b44ad8" },
+  battle: { name: "전투", tag: "전투", text: "중앙 AI의 작업봇 무리와 싸운다. 처치한 적에게서 고철을 얻는다.", color: "#e05252" },
+  elite: { name: "정예 전투", tag: "전투", text: "구역 전용 적이 많고 더 단단하다. 대신 고철을 더 많이 얻는다.", color: "#b44ad8" },
   event: { name: "사건", tag: "사건", text: "무슨 일이 기다리고 있을지 모른다.", color: "#4fa3e0" },
   upgrade: { name: "강화 구역", tag: "강화", text: "고철로 모듈을 개발하고 카트리지에 장착한다.", color: "#e8b931" },
   boss: { name: "구역 보스", tag: "보스", text: "이 구역을 지키는 중앙 AI의 대형 기체. 쓰러뜨리면 다음 구역으로 간다.", color: "#ff6b3c" }
@@ -157,6 +157,8 @@ function startBattle(t) {
   g.node = t;
   g.level = Math.max(0, (g.zone - 1) * CONFIG.route.nodesPerZone + g.step - 1);
   g.clearTimer = -1;
+  g.hazards = [];
+  g.bossShots = [];
   state = "play";
   canvas.focus();
   if (t === "boss") {

@@ -358,8 +358,7 @@ function dropScrap(x, y, n) {
 function spawnEnemy(force) {
   const g = game;
   const bc = CONFIG.battle;
-  const ratio = g.node === "elite" ? bc.eliteGuardRatio : bc.guardRatio;
-  const type = force || (g.level >= bc.guardFromLevel && Math.random() < ratio ? "guard" : "drone");
+  const type = force || pickEnemyType();
   const d = CONFIG.enemies[type];
   const side = Math.floor(Math.random() * 4);
   let x;
@@ -443,6 +442,8 @@ function useClaw() {
     return;
   }
   target.held = true;
+  if (target.ai) target.ai = "move";
+  target.windup = 0;
   target.pull = k.pullTime;
   target.stun = 0;
   g.held = target;
@@ -504,6 +505,7 @@ function clawImpact(e) {
   burst(e.x, e.y, "#cfd6e0", 18, 220);
   burst(e.x, e.y, "#e8b931", 8, 160);
   g.shake = Math.min(8, g.shake + 3);
+  if (e.onImpact) e.onImpact(e);
 }
 
 function updateClaw(dt) {
@@ -591,6 +593,7 @@ function hitTarget(t, dmg) {
 
 function damageEnemy(e, amount) {
   if (e.transition) return;
+  amount *= enemyDamageMul(e);
   e.hp -= amount * (e.vulnerable > 0 ? CONFIG.boss.vulnerableMul : 1);
   e.flash = 0.08;
 }
@@ -813,8 +816,11 @@ function updateEnemies(dt) {
     if (e.stun > 0) {
       e.stun -= dt;
       e.angle += dt * 8;
+      if (e.ai && e.ai !== "move") e.ai = "move";
+      e.windup = 0;
       continue;
     }
+    if (runEnemyAi(e, dt)) continue;
     e.attackTimer -= dt;
     let target = p;
     let best = dist(e, p) - p.r;
@@ -892,13 +898,18 @@ function cleanup() {
     if (e.dead && e.noReward) continue;
     if (e.hp <= 0 && !e.dead) {
       e.dead = true;
+      if (e.onDeath) e.onDeath(e);
       g.kills++;
       dropScrap(e.x, e.y, CONFIG.enemies[e.type].scrap);
       burst(e.x, e.y, CONFIG.enemies[e.type].color, 14, 180);
     }
   }
   if (g.held && g.held.dead) g.held = null;
-  if (g.boss && g.boss.dead) g.boss = null;
+  if (g.boss && g.boss.dead) {
+    g.boss = null;
+    g.hazards = [];
+    g.bossShots = [];
+  }
   cleanupSkills();
   g.enemies = g.enemies.filter(e => !e.dead);
   g.cleaners = g.cleaners.filter(r => !r.dead);
@@ -1083,6 +1094,7 @@ function drawEnemy(e) {
     drawBossSprite(e);
     return;
   }
+  if (drawRobotEnemy(e)) return;
   const color = e.flash > 0 ? "#ffffff" : CONFIG.enemies[e.type].color;
   ctx.save();
   ctx.translate(e.x, e.y);
