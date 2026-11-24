@@ -1,15 +1,18 @@
 const upgradeEl = document.getElementById("upgrade");
 const MAINT_BOX = {
-  title: [60, 55, 900, 75],
-  tabs: [55, 175, 915, 42],
-  cards: [[65, 280, 260, 315], [380, 280, 260, 315], [690, 280, 260, 315]],
-  list: [65, 280, 885, 315],
-  board: [65, 660, 895, 130],
-  info: [420, 860, 535, 275],
-  recycle: [65, 1210, 890, 100],
-  go: [65, 1375, 890, 65],
-  slots: [[88, 875], [235, 875], [88, 1018], [235, 1018]],
-  slotSize: 105
+  title: [52, 40, 920, 85],
+  tabs: [50, 175, 924, 42],
+  cards: [[60, 267, 273, 336], [382, 267, 260, 336], [690, 267, 274, 336]],
+  empty: [60, 267, 904, 336],
+  pager: [400, 618, 224, 32],
+  prev: [8, 395, 44, 80],
+  next: [972, 395, 44, 80],
+  board: [62, 664, 900, 108],
+  info: [412, 856, 552, 284],
+  recycle: [58, 1203, 908, 109],
+  go: [62, 1376, 900, 72],
+  slots: [[80, 869], [228, 869], [80, 1013], [228, 1013]],
+  slotSize: 116
 };
 
 const maint = {
@@ -20,6 +23,8 @@ const maint = {
   sel: null,
   hover: null,
   notice: "",
+  page: 0,
+  pageSkill: null,
   drag: null
 };
 
@@ -93,6 +98,7 @@ function openUpgrade() {
   mouse.spray = false;
   game.beam = null;
   maint.tab = "rec";
+  maint.page = 0;
   maint.recs = makeRecs();
   maint.bought = false;
   maint.sel = null;
@@ -165,6 +171,10 @@ function currentOffers() {
   return Object.keys(cartridgeOf(maint.skill).mods).map(type => ({ kind: "dev", skill: maint.skill, type }));
 }
 
+function pageCount() {
+  return Math.max(1, Math.ceil(currentOffers().length / 3));
+}
+
 function offerKey(o) {
   return o.kind + ":" + o.skill + ":" + o.type;
 }
@@ -194,20 +204,31 @@ function renderUpgrade() {
   const width = Math.min(window.innerWidth * 0.94, 700);
   const target = maint.drag ? maint.drag.item : maint.sel;
   const targetSkill = target && target.kind !== "slot" ? target.skill : null;
+  if (maint.pageSkill !== maint.skill) {
+    maint.page = 0;
+    maint.pageSkill = maint.skill;
+  }
+  const pages = maint.tab === "rec" ? 1 : pageCount();
+  maint.page = Math.min(maint.page, pages - 1);
   const offers = currentOffers();
+  const first = maint.tab === "rec" ? 0 : maint.page * 3;
   const card = (o, i) => {
     const problem = offerProblem(o);
     const sel = maint.sel && maint.sel.kind !== "slot" && offerKey(maint.sel) === offerKey(o);
-    return '<button type="button" class="mt-card' + (o.type === "special" ? " special" : "") + (sel ? " sel" : "") + (problem ? " off" : "") + '" data-offer="' + i + '"' +
-      (maint.tab === "rec" ? ' style="' + box(MAINT_BOX.cards[i]) + '"' : "") + ">" +
+    return '<button type="button" class="mt-card' + (o.type === "special" ? " special" : "") + (sel ? " sel" : "") + (problem ? " off" : "") + '" data-offer="' + (first + i) + '" style="' + box(MAINT_BOX.cards[i]) + '">' +
       '<img class="mt-icon" src="' + moduleIcon(o.skill, o.type) + '" alt="" draggable="false">' +
       '<b class="mt-name">' + moduleName(o.skill, o.type) + "</b>" +
       '<span class="mt-skill"><img src="assets/ui/skills/' + o.skill + '.png" alt="" draggable="false">' + cartridgeOf(o.skill).name + "</span>" +
       '<span class="mt-price">고철 ' + offerPrice(o) + "</span></button>";
   };
-  const cardsHtml = maint.tab === "rec"
-    ? (offers.length ? offers.map(card).join("") : '<div class="mt-empty" style="' + box(MAINT_BOX.list) + '">추천할 모듈이 없어요</div>')
-    : '<div class="mt-list" style="' + box(MAINT_BOX.list) + '">' + offers.map(card).join("") + "</div>";
+  const shown = offers.slice(first, first + 3);
+  let cardsHtml = shown.length ? shown.map(card).join("") : '<div class="mt-empty" style="' + box(MAINT_BOX.empty) + '">추천할 모듈이 없어요</div>';
+  if (maint.tab === "dev") {
+    cardsHtml +=
+      '<button type="button" class="mt-arrow" data-page="-1" aria-label="이전 모듈" style="' + box(MAINT_BOX.prev) + '"' + (maint.page > 0 ? "" : " disabled") + ">◀</button>" +
+      '<button type="button" class="mt-arrow" data-page="1" aria-label="다음 모듈" style="' + box(MAINT_BOX.next) + '"' + (maint.page < pages - 1 ? "" : " disabled") + ">▶</button>" +
+      '<div class="mt-pager" style="' + box(MAINT_BOX.pager) + '">' + cartridgeOf(maint.skill).name + " · " + (maint.page + 1) + " / " + pages + "</div>";
+  }
   const board = '<div class="mt-board" style="' + box(MAINT_BOX.board) + '">' + CARTRIDGES.map(c => {
     const used = slotsOf(c.id).filter(Boolean).length;
     return '<button type="button" class="mt-cart' + (c.id === maint.skill ? " cur" : "") + (c.id === targetSkill ? " target" : "") + '" data-skill="' + c.id + '" title="' + c.name + " (" + c.key + ')">' +
@@ -227,11 +248,10 @@ function renderUpgrade() {
   upgradeEl.innerHTML =
     '<div class="maint" style="width:' + width + "px;font-size:" + width / 1024 * 20 + 'px" role="dialog" aria-label="모듈 정비">' +
     '<img class="mt-bg" src="assets/ui/maintenance.jpg" alt="" draggable="false">' +
-    '<div class="mt-title" style="' + box(MAINT_BOX.title) + '"><b>모듈 정비</b><span>고철 <strong>' + g.scrap + "</strong>개</span></div>" +
+    '<div class="mt-title" style="' + box(MAINT_BOX.title) + '"><b>모듈 정비</b><em class="mt-notice">' + maint.notice + '</em><span>고철 <strong>' + g.scrap + "</strong>개</span></div>" +
     '<div class="mt-tabs" style="' + box(MAINT_BOX.tabs) + '">' +
     '<button type="button" class="mt-tab' + (maint.tab === "rec" ? " on" : "") + '" data-tab="rec">추천 모듈</button>' +
     '<button type="button" class="mt-tab' + (maint.tab === "dev" ? " on" : "") + '" data-tab="dev">지정 개발 · 가격 2배</button></div>' +
-    (maint.notice ? '<div class="mt-notice" style="' + box([65, 228, 885, 40]) + '">' + maint.notice + "</div>" : "") +
     cardsHtml + board + slotsHtml +
     '<div class="mt-info" style="' + box(MAINT_BOX.info) + '">' + describe() + "</div>" +
     '<button type="button" class="mt-recycle' + (dragSlot ? " armed" : "") + '" data-recycle="1" style="' + box(MAINT_BOX.recycle) + '">' + recycleText + "</button>" +
@@ -271,9 +291,19 @@ function tap(el) {
     closeUpgrade();
     return;
   }
+  const pageEl = el.closest("[data-page]");
+  if (pageEl) {
+    if (!pageEl.disabled) {
+      maint.page = Math.max(0, Math.min(pageCount() - 1, maint.page + Number(pageEl.dataset.page)));
+      maint.hover = null;
+      renderUpgrade();
+    }
+    return;
+  }
   const tabEl = el.closest("[data-tab]");
   if (tabEl) {
     maint.tab = tabEl.dataset.tab;
+    maint.page = 0;
     maint.sel = null;
     maint.hover = null;
     renderUpgrade();
