@@ -4,7 +4,7 @@
   css.rel = "stylesheet";
   css.href = "style.css?t=" + t;
   document.head.appendChild(css);
-  for (const name of ["config", "modules", "game", "skills", "upgrade", "route", "bosses", "enemies"]) {
+  for (const name of ["config", "modules", "game", "skills", "upgrade", "route", "bosses", "enemies", "tutorial"]) {
     const s = document.createElement("script");
     s.src = "js/" + name + ".js?t=" + t;
     s.async = false;

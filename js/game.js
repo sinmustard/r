@@ -160,6 +160,7 @@ function newGame() {
     scrapPulse: 0,
     kills: 0,
     zone: 1,
+    lastZone: finalZone(),
     step: 0,
     node: null,
     lastNode: null,
@@ -176,10 +177,35 @@ function newGame() {
 }
 
 function startGame() {
+  if (!tutorialDone()) {
+    startGuide(true);
+    return;
+  }
   game = newGame();
   state = "play";
   mouse.spray = false;
   openRoute();
+}
+
+function finalZone() {
+  return clearCount() >= CONFIG.unlockZone5 ? CONFIG.bosses.length : CONFIG.bosses.length - 1;
+}
+
+function store(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch (e) {
+    return null;
+  }
+  return null;
+}
+
+const settings = Object.assign({ shake: true }, JSON.parse(store("factory-settings") || "{}"));
+
+function saveSettings() {
+  store("factory-settings", JSON.stringify(settings));
 }
 
 function clearCount() {
@@ -205,6 +231,8 @@ function canRestart() {
 }
 
 function goTitle() {
+  routeEl.hidden = true;
+  upgradeEl.hidden = true;
   state = "title";
   titleView = "menu";
   titleIndex = 0;
@@ -213,10 +241,39 @@ function goTitle() {
 
 let titleView = "menu";
 let titleIndex = 0;
-const titleButtons = [
-  { label: "게임 시작", action: () => startGame() },
-  { label: "조작법", action: () => { titleView = "controls"; } }
-];
+
+function setView(v) {
+  titleView = v;
+  titleIndex = 0;
+}
+
+function titleButtonsFor(view) {
+  if (view === "settings") {
+    return [
+      { label: "화면 흔들림 · " + (settings.shake ? "켜짐" : "꺼짐"), action: () => { settings.shake = !settings.shake; saveSettings(); } },
+      { label: "전체 화면 · " + (document.fullscreenElement ? "켜짐" : "꺼짐"), action: toggleFullscreen },
+      { label: "돌아가기", action: () => setView("menu") }
+    ];
+  }
+  if (view === "reset") {
+    return [
+      { label: "기록 지우기", action: () => { store("factory-clears", null); setView("menu"); } },
+      { label: "취소", action: () => setView("menu") }
+    ];
+  }
+  return [
+    { label: "게임 시작", action: () => startGame() },
+    { label: "튜토리얼", action: () => startGuide(false) },
+    { label: "조작법", action: () => setView("controls") },
+    { label: "설정", action: () => setView("settings") },
+    { label: "기록 초기화", action: () => setView("reset") }
+  ];
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen().catch(() => {});
+}
 const titleBack = { x: 120, y: 604, w: 220, h: 48 };
 const titleScene = {
   t: 0,
@@ -231,7 +288,7 @@ const titleScene = {
 };
 
 function titleButtonRect(i) {
-  return { x: 120, y: 420 + i * 72, w: 300, h: 56 };
+  return { x: 120, y: 392 + i * 54, w: 300, h: 44 };
 }
 
 function inRect(r, x, y) {
@@ -240,6 +297,7 @@ function inRect(r, x, y) {
 
 function titleHover() {
   if (titleView === "controls") return inRect(titleBack, mouse.x, mouse.y);
+  const titleButtons = titleButtonsFor(titleView);
   for (let i = 0; i < titleButtons.length; i++) {
     if (inRect(titleButtonRect(i), mouse.x, mouse.y)) {
       titleIndex = i;
@@ -251,9 +309,10 @@ function titleHover() {
 
 function titleClick() {
   if (titleView === "controls") {
-    if (inRect(titleBack, mouse.x, mouse.y)) titleView = "menu";
+    if (inRect(titleBack, mouse.x, mouse.y)) setView("menu");
     return;
   }
+  const titleButtons = titleButtonsFor(titleView);
   for (let i = 0; i < titleButtons.length; i++) {
     if (inRect(titleButtonRect(i), mouse.x, mouse.y)) {
       titleButtons[i].action();
@@ -264,9 +323,14 @@ function titleClick() {
 
 function titleKey(code) {
   if (titleView === "controls") {
-    if (["Escape", "Space", "Enter", "Backspace"].includes(code)) titleView = "menu";
+    if (["Escape", "Space", "Enter", "Backspace"].includes(code)) setView("menu");
     return;
   }
+  if (titleView !== "menu" && (code === "Escape" || code === "Backspace")) {
+    setView("menu");
+    return;
+  }
+  const titleButtons = titleButtonsFor(titleView);
   const n = titleButtons.length;
   if (code === "KeyW" || code === "ArrowUp") titleIndex = (titleIndex + n - 1) % n;
   if (code === "KeyS" || code === "ArrowDown") titleIndex = (titleIndex + 1) % n;
@@ -304,6 +368,10 @@ window.addEventListener("mousedown", e => {
     titleClick();
     return;
   }
+  if (state === "guide") {
+    guideNext();
+    return;
+  }
   if (state === "over") {
     if (canRestart()) startGame();
     return;
@@ -322,6 +390,14 @@ window.addEventListener("contextmenu", e => e.preventDefault());
 function onPress(code) {
   if (state === "title") {
     titleKey(code);
+    return;
+  }
+  if (state === "guide") {
+    guideKey(code);
+    return;
+  }
+  if (state === "pause" && code === "Backspace" && game.tutorial && !game.tutorial.required) {
+    goTitle();
     return;
   }
   if (state === "upgrade") {
@@ -641,6 +717,7 @@ function update(dt) {
   updateScraps(dt);
   updateEffects(dt);
   cleanup();
+  if (g.tutorial) updateTutorial(dt);
   if (g.player.hp <= 0) {
     g.player.hp = 0;
     g.beam = null;
@@ -758,6 +835,7 @@ function updateCleaners(dt) {
       ty = p.y;
       if (dist(r, p) < p.r + r.r + 6) {
         r.dead = true;
+        g.delivered = (g.delivered || 0) + r.carry;
         if (r.carry > 0) {
           g.scrap += r.carry;
           g.scrapPulse = 0.4;
@@ -836,6 +914,10 @@ function updateEnemies(dt) {
       e.angle += dt * 8;
       if (e.ai && e.ai !== "move") e.ai = "move";
       e.windup = 0;
+      continue;
+    }
+    if (e.passive) {
+      e.angle = Math.atan2(p.y - e.y, p.x - e.x);
       continue;
     }
     if (runEnemyAi(e, dt)) continue;
@@ -1619,8 +1701,14 @@ function drawTitle() {
   ctx.fillText("중앙 AI가 인간을 말살하려 한다.", 124, 318);
   ctx.fillText("쓰레기 처리공장이 거대 로봇으로 변신해 맞선다.", 124, 346);
 
-  if (titleView === "menu") {
-    titleButtons.forEach((b, i) => drawTitleButton(titleButtonRect(i), b.label, i === titleIndex));
+  if (titleView !== "controls") {
+    if (titleView === "reset") {
+      ctx.fillStyle = "#ff9a9a";
+      ctx.font = `bold 18px ${FONT}`;
+      ctx.textBaseline = "middle";
+      ctx.fillText("누적 클리어 기록(" + clearCount() + "회)을 지울까요? 되돌릴 수 없어요.", 124, 372);
+    }
+    titleButtonsFor(titleView).forEach((b, i) => drawTitleButton(titleButtonRect(i), b.label, i === titleIndex));
   } else {
     ctx.fillStyle = "#ffffff";
     ctx.font = `bold 22px ${FONT}`;
@@ -1644,16 +1732,18 @@ function drawTitle() {
   ctx.textBaseline = "middle";
   ctx.font = `13px ${FONT}`;
   ctx.fillStyle = "#6b717c";
-  const hint = titleView === "menu" ? "W/S 또는 마우스로 고르고, 스페이스나 클릭으로 결정" : "Esc 또는 스페이스로 돌아가기";
+  const hint = titleView === "controls" ? "Esc 또는 스페이스로 돌아가기" : titleView === "menu" ? "W/S 또는 마우스로 고르고, 스페이스나 클릭으로 결정" : "W/S로 고르고 스페이스로 결정 · Esc로 돌아가기";
   ctx.fillText(hint, 124, H - 40);
   ctx.textAlign = "right";
   ctx.fillText("v" + VERSION, W - 24, H - 40);
   const clears = clearCount();
-  if (clears > 0) {
-    ctx.fillStyle = "#e8b931";
-    ctx.font = `bold 15px ${FONT}`;
-    ctx.fillText("누적 클리어 " + clears + "회", W - 24, H - 64);
-  }
+  const open = clears >= CONFIG.unlockZone5;
+  ctx.fillStyle = "#e8b931";
+  ctx.font = `bold 15px ${FONT}`;
+  ctx.fillText("누적 클리어 " + clears + "회", W - 24, H - 88);
+  ctx.fillStyle = open ? "#7fd37f" : "#9aa3ad";
+  ctx.font = `14px ${FONT}`;
+  ctx.fillText(open ? "5구역 · 중앙 AI 열림" : "5구역 잠김 · " + clears + " / " + CONFIG.unlockZone5 + "회 클리어 후 열림", W - 24, H - 64);
 }
 
 function drawGameOver() {
@@ -1661,7 +1751,7 @@ function drawGameOver() {
   drawOverlay();
   ctx.fillStyle = g.won ? "#e8b931" : "#ff6b6b";
   ctx.font = `900 72px ${FONT}`;
-  ctx.fillText(g.won ? "중앙 AI 격파!" : "공장 정지", W / 2, 250);
+  ctx.fillText(g.won ? bossInfo(g.lastZone).name + " 격파!" : "공장 정지", W / 2, 250);
   ctx.fillStyle = "#d7dce3";
   ctx.font = `20px ${FONT}`;
   ctx.fillText(g.won ? "모든 구역 돌파  ·  처치 " + g.kills + "  ·  고철 " + g.scrap : "구역 " + g.zone + " · " + Math.max(1, g.step) + "번째 칸  ·  처치 " + g.kills + "  ·  고철 " + g.scrap, W / 2, 330);
@@ -1682,6 +1772,11 @@ function drawPause() {
   ctx.font = `900 56px ${FONT}`;
   ctx.fillText("일시정지", W / 2, 300);
   drawPrompt("클릭하거나 Esc를 눌러 계속", 380);
+  if (game.tutorial && !game.tutorial.required) {
+    ctx.font = `15px ${FONT}`;
+    ctx.fillStyle = "#9aa3ad";
+    ctx.fillText("Backspace를 누르면 튜토리얼을 그만두고 시작 화면으로", W / 2, 424);
+  }
 }
 
 function draw() {
@@ -1691,8 +1786,12 @@ function draw() {
     drawTitle();
     return;
   }
+  if (state === "guide") {
+    drawGuide();
+    return;
+  }
   ctx.save();
-  if (state === "play" && g.shake > 0) ctx.translate(rand(-1, 1) * g.shake, rand(-1, 1) * g.shake);
+  if (state === "play" && g.shake > 0 && settings.shake) ctx.translate(rand(-1, 1) * g.shake, rand(-1, 1) * g.shake);
   const zoom = g.boss && g.boss.transition ? g.boss.transition.zoom : 1;
   if (zoom > 1) {
     const b = g.boss;
@@ -1724,6 +1823,7 @@ function draw() {
   drawTexts();
   ctx.restore();
   drawHud();
+  if (g.tutorial) drawTutorial();
   if (state === "pause") drawPause();
   else if (state === "over") drawGameOver();
 }

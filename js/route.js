@@ -134,7 +134,7 @@ function renderRoute() {
       '<span class="num">' + (i + 1) + '</span><span class="tag">' + n.tag + "</span><b>" + n.name + '</b><span class="d">' + n.text + "</span></button>";
   }).join("");
   routeEl.innerHTML = '<div class="up-panel route-panel" role="dialog" aria-label="다음 목적지">' +
-    routeHeader("구역 " + g.zone + " · " + Math.min(g.step + 1, rc.nodesPerZone) + "번째 칸", atBoss ? "보스가 기다리고 있습니다" : "다음 목적지를 고르세요") +
+    routeHeader("구역 " + g.zone + " / " + g.lastZone + " · " + Math.min(g.step + 1, rc.nodesPerZone) + "번째 칸", atBoss ? "보스가 기다리고 있습니다" : "다음 목적지를 고르세요") +
     '<div class="route-track">' + track + '</div><div class="route-cards">' + cards + "</div>" +
     '<footer><span class="rule">' + rc.nodesPerZone + "칸을 지나면 보스와 싸워요 · 숫자 키 1~" + routeChoices.length + "로도 고를 수 있어요</span></footer></div>";
 }
@@ -187,7 +187,7 @@ function startBattle(t) {
 
 function finishBattle() {
   const g = game;
-  if (g.node === "boss" && g.zone >= CONFIG.bosses.length) {
+  if (g.node === "boss" && g.zone >= g.lastZone) {
     g.node = null;
     g.won = true;
     addClear();

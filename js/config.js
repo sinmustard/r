@@ -1,4 +1,4 @@
-const VERSION = "0.16.1";
+const VERSION = "0.17";
 
 const CONFIG = {
   width: 1280,
@@ -56,6 +56,7 @@ const CONFIG = {
     cursor: { near: 220, far: 320, wind: 1.1, size: 150, damage: 28, cool: 2.6 }
   },
   battle: { spawnInterval: 0.5, baseCount: 6, countPerLevel: 2, hpPerLevel: 0.08, eliteHp: 1.3, collectTime: 3 },
+  unlockZone5: 10,
   route: { nodesPerZone: 6, minChoices: 2, maxChoices: 3 },
   bosses: [
     { name: "철강공장", sprite: "steel-factory", radius: 46 },
