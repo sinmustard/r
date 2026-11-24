@@ -1,4 +1,4 @@
-const VERSION = "0.10";
+const VERSION = "0.11";
 
 const CONFIG = {
   width: 1280,
@@ -22,7 +22,8 @@ const CONFIG = {
   enemies: {
     drone: { name: "소형 드론", radius: 13, speed: 120, hp: 30, damage: 10, scrap: 1, color: "#e0525a" },
     guard: { name: "경비 로봇", radius: 22, speed: 70, hp: 120, damage: 22, scrap: 3, color: "#b44ad8" },
-    boss: { name: "구역 관리 기체", radius: 40, speed: 55, hp: 1400, damage: 35, scrap: 25, color: "#c0392b" }
+    boss: { name: "구역 관리 기체", radius: 40, speed: 55, hp: 1400, damage: 35, scrap: 25, color: "#c0392b" },
+    clone: { name: "복제 프로그램", radius: 30, speed: 0, hp: 120, damage: 30, scrap: 0, color: "#ff3b6b" }
   },
   battle: { spawnInterval: 0.5, baseCount: 6, countPerLevel: 2, hpPerLevel: 0.08, guardFromLevel: 2, guardRatio: 0.2, eliteGuardRatio: 0.5, eliteHp: 1.3, collectTime: 3 },
   route: { nodesPerZone: 6, minChoices: 2, maxChoices: 3 },

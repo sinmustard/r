@@ -303,6 +303,279 @@ BOSS_DEFS["auto-factory"] = {
   }
 };
 
+function inChem(x, y) {
+  return game.hazards.some(h => h.chem && h.t >= h.warn && h.shape === "circle" && Math.hypot(x - h.x, y - h.y) < h.r);
+}
+
+function chemPuddle(x, y, r, type) {
+  addHazard({ shape: "circle", x: clamp(x, 0, W), y: clamp(y, 0, H), r, active: 3.5, dps: 18, color: type === 2 ? "#a55bd6" : "#7ad13a", chem: type || 1 });
+}
+
+function chemBlast(x, y, r, damage) {
+  addHazard({ shape: "circle", x, y, r, active: 0.15, damage, color: "#ffe27a" });
+  burst(x, y, "#ffe27a", 22, 260);
+  burst(x, y, "#7ad13a", 12, 200);
+  game.shake = Math.min(10, game.shake + 5);
+}
+
+function throwBarrel(b, to, explodeAlways) {
+  addHazard({ shape: "circle", x: to.x, y: to.y, r: 40, warn: 0.9, active: 0, color: "#7ad13a" });
+  lobShot(b, to, 0.9, "barrel", s => {
+    if (explodeAlways || inChem(s.x, s.y)) chemBlast(s.x, s.y, 70, 40);
+    else dropBossObject(s.x, s.y, "barrel", 0);
+  });
+}
+
+BOSS_DEFS["chemical-factory"] = {
+  phases: [0.5],
+  idle: [1.3, 0.8],
+  patterns: {
+    spray: () => {
+      const ev = [];
+      for (let i = 0; i < 3; i++) {
+        ev.push([i * 0.4, (b, p) => {
+          const a = aim(b, p) + (i - 1) * 0.5;
+          const type = b.phase > 0 ? 1 + (i % 2) : 1;
+          addHazard({
+            shape: "cone", x: b.x, y: b.y, angle: a, spread: 0.85, len: 280, warn: 0.5, active: 0.3, damage: 18, color: type === 2 ? "#a55bd6" : "#7ad13a",
+            onStart: h => {
+              for (const d of [100, 180, 255]) chemPuddle(h.x + Math.cos(h.angle) * d, h.y + Math.sin(h.angle) * d, 26 + d * 0.06, type);
+            }
+          });
+        }]);
+      }
+      return makeAct(1.9, ev, (dt, b, p) => moveToward(b, p.x, p.y, 40 * dt));
+    },
+    waves: b => {
+      const n = b.phase > 0 ? 3 : 2;
+      const ev = [];
+      let gap = Math.random() * Math.PI * 2;
+      for (let i = 0; i < n; i++) {
+        const g0 = gap;
+        gap += Math.PI * (0.6 + Math.random() * 0.6);
+        ev.push([i * 1.0, bb => addHazard({
+          shape: "ring", x: bb.x, y: bb.y, radius: bb.r, thick: 26, gap: g0, gapWidth: 1.0, warn: 0.5, active: 2.8, damage: 30, color: "#9fd8c0",
+          move: (h, dt) => { if (h.t >= h.warn) h.radius += 300 * dt; }
+        })]);
+      }
+      return makeAct(n * 1.0 + 2.5, ev);
+    },
+    barrels: () => {
+      const ev = [];
+      for (let i = 0; i < 3; i++) {
+        ev.push([i * 0.3, (b, p) => throwBarrel(b, { x: clamp(p.x + rand(-80, 80), 30, W - 30), y: clamp(p.y + rand(-80, 80), 30, H - 30) }, false)]);
+      }
+      return makeAct(1.9, ev);
+    },
+    pipes: () => {
+      const ev = [];
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      for (let i = 0; i < 4; i++) {
+        ev.push([i * 0.35, (b, p) => {
+          const a = aim(b, p) + dir * i * (Math.PI / 2) + dir * 0.3;
+          lineHazard(b.x, b.y, a, 430, 44, { warn: 0.5, active: 0.5, dps: 60, color: "#e6e8ec" });
+        }]);
+      }
+      return makeAct(2.4, ev);
+    },
+    flood: b => {
+      const safe = [];
+      let tries = 0;
+      while (safe.length < 3 && tries++ < 200) {
+        const s = { x: rand(130, W - 130), y: rand(150, H - 160), r: 80 };
+        if (safe.every(o => dist(o, s) > 230)) safe.push(s);
+      }
+      const ev = [[0, () => {
+        addHazard({ shape: "flood", safe, warn: 3, active: 5, dps: 30, color: "#7ad13a" });
+        showBanner("긴급 배출 · 발판으로 피하세요");
+      }]];
+      if (b.floods > 0) ev.push([1.6, bb => throwBarrel(bb, safe[Math.floor(Math.random() * safe.length)], true)]);
+      b.floods = (b.floods || 0) + 1;
+      return makeAct(8.2, ev);
+    }
+  },
+  update: (b, dt) => {
+    if (b.phase < 1) return;
+    const list = game.hazards.filter(h => h.chem && h.t >= h.warn && !h.dead);
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i];
+        const c = list[j];
+        if (a.chem !== c.chem && !a.dead && !c.dead && dist(a, c) < a.r + c.r) {
+          a.dead = true;
+          c.dead = true;
+          chemBlast((a.x + c.x) / 2, (a.y + c.y) / 2, 60, 35);
+        }
+      }
+    }
+  }
+};
+
+BOSS_DEFS.executioner = {
+  phases: [0.5],
+  idle: [1.4, 1.0],
+  combos2: [["barrage", "barrier"], ["burn", "crush"], ["barrage", "burn"]],
+  patterns: {
+    barrage: b => {
+      const n = b.phase > 0 ? 12 : 8;
+      const ev = [];
+      for (let i = 0; i < n; i++) {
+        ev.push([i * 0.18, (bb, pp) => addHazard({ shape: "circle", x: clamp(pp.x + rand(-200, 200), 20, W - 20), y: clamp(pp.y + rand(-200, 200), 20, H - 20), r: 52, warn: 0.8, active: 0.12, damage: 28, color: "#ff6b3c" })]);
+      }
+      return makeAct(n * 0.18 + 1.1, ev);
+    },
+    barrier: () => makeAct(3.8, [[0, () => {
+      for (const side of [-1, 1]) {
+        addHazard({
+          shape: "wall", x: side < 0 ? 13 : W - 13, thick: 26, gapY: rand(130, H - 130), gapH: 130, warn: 0.6, active: 3, damage: 30, color: "#b44ad8", side,
+          move: (h, dt) => { if (h.t >= h.warn) h.x += -h.side * (W / 2 - 13) / 3 * dt; }
+        });
+      }
+    }]]),
+    burn: () => {
+      const rows = 6;
+      const order = Array.from({ length: rows }, (_, i) => i).sort(() => Math.random() - 0.5).slice(0, rows - 1);
+      const ev = order.map((row, i) => [i * 0.45, () => addHazard({ shape: "rect", x: W / 2, y: (row + 0.5) * H / rows, angle: 0, len: W, width: H / rows - 4, warn: 0.8, active: 1.0, dps: 45, color: "#ff7a1a", molten: true })]);
+      return makeAct(order.length * 0.45 + 1.9, ev);
+    },
+    crush: () => makeAct(3.4, [[0, (b, p) => {
+      b.crushA = aim(b, p);
+      b.windup = 1;
+      b.crushHit = false;
+      lineHazard(b.x, b.y, b.crushA, 1600, b.r * 2 + 10, { warn: 1, active: 0, color: "#ff4b4b" });
+    }]], (dt, b, p, t) => {
+      b.windup = Math.max(0, b.windup - dt);
+      if (t > 1 && t < 2.4) {
+        const nx = b.x + Math.cos(b.crushA) * 760 * dt;
+        const ny = b.y + Math.sin(b.crushA) * 760 * dt;
+        if (nx < b.r || nx > W - b.r || ny < b.r || ny > H - b.r) {
+          if (!b.crushStop) {
+            b.crushStop = true;
+            game.shake = Math.min(12, game.shake + 8);
+          }
+        } else {
+          b.x = nx;
+          b.y = ny;
+        }
+        if (!b.crushHit && dist(b, p) < b.r + p.r) {
+          b.crushHit = true;
+          hitTarget(p, 45);
+        }
+      }
+      if (t >= 2.4) {
+        b.crushStop = false;
+        b.vulnerable = Math.max(b.vulnerable || 0, 0.1);
+      }
+    })
+  }
+};
+
+function spawnClone(b, x, y) {
+  const d = CONFIG.enemies.clone;
+  const hp = d.hp * (1 + (game.zone - 1) * 0.3);
+  const c = { type: "clone", sprite: b.sprite, alpha: 0.5, x, y, r: d.radius, hp, maxHp: hp, speed: 0, damage: d.damage, attackTimer: 0, flash: 0, angle: 0, life: 4.2 };
+  game.enemies.push(c);
+  burst(x, y, "#ff3b6b", 14, 180);
+  return c;
+}
+
+function updateClones(dt) {
+  const p = game.player;
+  for (const c of game.enemies) {
+    if (c.type !== "clone" || c.dead) continue;
+    c.life -= dt;
+    if (c.life <= 0) {
+      c.dead = true;
+      c.hp = 0;
+      c.noReward = true;
+      burst(c.x, c.y, "#ff3b6b", 10, 140);
+      continue;
+    }
+    if (c.charge) {
+      c.x = clamp(c.x + c.charge.vx * dt, c.r, W - c.r);
+      c.y = clamp(c.y + c.charge.vy * dt, c.r, H - c.r);
+      c.charge.t -= dt;
+      if (!c.charge.hit && dist(c, p) < c.r + p.r) {
+        c.charge.hit = true;
+        hitTarget(p, c.damage);
+      }
+      if (c.charge.t <= 0) c.charge = null;
+    }
+  }
+}
+
+function securityTiles(share, warn) {
+  const size = 160;
+  for (let x = 0; x < W; x += size) {
+    for (let y = 0; y < H; y += size) {
+      if (Math.random() < share) addHazard({ shape: "rect", x: x + size / 2, y: y + size / 2, angle: 0, len: size - 6, width: size - 6, warn, active: 0.4, damage: 35, color: "#ff3b6b" });
+    }
+  }
+}
+
+BOSS_DEFS["central-ai"] = {
+  phases: [2 / 3, 1 / 3],
+  idle: [1.4, 1.1, 0.9],
+  still: true,
+  phasePatterns: [["security"], ["clone", "security"], ["collapse", "security"]],
+  patterns: {
+    security: () => makeAct(2.6, [[0, () => {
+      securityTiles(0.35, 1.2);
+      for (let i = 0; i < 2; i++) {
+        const a = Math.random() < 0.5 ? 0 : Math.PI / 2;
+        addHazard({ shape: "rect", x: rand(200, W - 200), y: rand(180, H - 180), angle: a, len: 380, width: 22, warn: 0.6, active: 4, damage: 20, color: "#5ff0c8" });
+      }
+    }]]),
+    clone: b => {
+      const spots = [[180, 200], [W - 180, 200], [W / 2, H - 170]];
+      const ev = [[0, bb => {
+        bb.clones = spots.map(([x, y]) => spawnClone(bb, x, y));
+      }]];
+      for (let i = 0; i < 3; i++) {
+        ev.push([0.9 + i * 0.7, (bb, pp) => {
+          const c = bb.clones[i];
+          if (!c || c.dead) return;
+          for (let k = 0; k < 8; k++) {
+            const t = k / 8;
+            const life = 0.4;
+            game.particles.push({ x: bb.x + (c.x - bb.x) * t, y: bb.y + (c.y - bb.y) * t, vx: 0, vy: 0, life, max: life, color: "#ff3b6b", size: 5 });
+          }
+          c.aimA = aim(c, pp);
+          lineHazard(c.x, c.y, c.aimA, 600 * 0.5 + c.r, c.r * 2, { warn: 0.6, active: 0, color: "#ff3b6b" });
+        }]);
+        ev.push([1.5 + i * 0.7, () => {
+          const c = b.clones[i];
+          if (!c || c.dead) return;
+          c.charge = { vx: Math.cos(c.aimA) * 600, vy: Math.sin(c.aimA) * 600, t: 0.5, hit: false };
+        }]);
+      }
+      return makeAct(4.2, ev);
+    },
+    collapse: () => makeAct(8, [[0, () => {
+      showBanner("시스템 붕괴 · 가운데로 모이세요");
+      addHazard({
+        shape: "outside", sx: 0, sy: 0, sw: W, sh: H, warn: 1, active: 6, dps: 35, color: "#ff3b6b",
+        move: h => {
+          const k = clamp((h.t - h.warn) / 3, 0, 1) * 0.45;
+          h.sw = W * (1 - k);
+          h.sh = H * (1 - k);
+          h.sx = (W - h.sw) / 2;
+          h.sy = (H - h.sh) / 2;
+        }
+      });
+    }], [3.5, () => securityTiles(0.15, 1)], [5.5, () => securityTiles(0.15, 1)], [7.2, b => {
+      b.vulnerable = 3.5;
+      showBanner("코어 노출!");
+      burst(b.x, b.y, "#ffe27a", 30, 260);
+    }]])
+  },
+  update: (b, dt) => {
+    b.hover = (b.hover || 0) + dt;
+    b.x += (W / 2 + Math.sin(b.hover * 0.6) * 180 - b.x) * Math.min(1, dt * 1.5);
+    b.y += (170 - b.y) * Math.min(1, dt * 1.5);
+  }
+};
+
 BOSS_DEFS.basic = {
   phases: [],
   idle: [1.5],
@@ -352,6 +625,7 @@ function updateBoss(dt) {
   if (b.phase < def.phases.length && ratio <= def.phases[b.phase]) {
     b.phase++;
     b.act = null;
+    b.act2 = null;
     b.queue = [];
     b.idle = 1.2;
     b.windup = 0;
@@ -360,6 +634,8 @@ function updateBoss(dt) {
     g.shake = Math.min(12, g.shake + 8);
     if (def.onPhase) def.onPhase(b);
   }
+  if (def.update) def.update(b, dt);
+  if (b.act2 && stepAct(b.act2, dt, b, p)) b.act2 = null;
   if (b.act) {
     if (stepAct(b.act, dt, b, p)) {
       b.act = null;
@@ -381,12 +657,17 @@ function updateBoss(dt) {
   if (b.idle <= 0) {
     const names = def.phasePatterns ? def.phasePatterns[b.phase] : null;
     const name = names ? names[Math.floor(Math.random() * names.length)] : pickPattern(b, def);
-    b.act = def.patterns[name](b);
-    if (def.combo && b.phase > 0 && !names) b.queue = [pickPattern(b, def)];
+    if (def.combos2 && b.phase > 0) {
+      const pair = def.combos2[Math.floor(Math.random() * def.combos2.length)];
+      b.act = def.patterns[pair[0]](b);
+      b.act2 = def.patterns[pair[1]](b);
+      b.lastPattern = pair[0];
+    } else {
+      b.act = def.patterns[name](b);
+      if (def.combo && b.phase > 0 && !names) b.queue = [pickPattern(b, def)];
+    }
   }
 }
-
-function updateClones() {}
 
 function drawHazard(h) {
   const live = h.t >= h.warn;
@@ -437,6 +718,17 @@ function drawHazard(h) {
     ctx.setLineDash([8, 6]);
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+  if (h.shape === "flood") {
+    ctx.globalAlpha = 0.9;
+    ctx.setLineDash([]);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#e8b931";
+    for (const s of h.safe) {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
   if (h.belt && live) {
     ctx.globalAlpha = 0.5;

@@ -839,6 +839,7 @@ function updateEffects(dt) {
 function cleanup() {
   const g = game;
   for (const e of g.enemies) {
+    if (e.dead && e.noReward) continue;
     if (e.hp <= 0 && !e.dead) {
       e.dead = true;
       g.kills++;
