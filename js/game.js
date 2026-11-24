@@ -1847,7 +1847,10 @@ Promise.all([
   for (const b of CONFIG.bosses) {
     for (const [key, dir] of [["move-", "move/"], ["move2-", "move2/"], ["trans-", "transition/"]]) loadSprite(key + b.sprite, "assets/bosses/game/" + dir + b.sprite + ".png").catch(() => {});
   }
-  for (const d of Object.values(CONFIG.enemies)) if (d.sheet) loadSprite("enemy-" + d.sheet, "assets/enemies/game/" + d.sheet + ".png").catch(() => {});
+  for (const d of Object.values(CONFIG.enemies)) {
+    if (!d.sheet) continue;
+    for (const dir of d.dirs ? ["", "-up", "-left", "-right"] : [""]) loadSprite("enemy-" + d.sheet + dir, "assets/enemies/game/" + d.sheet + dir + ".png").catch(() => {});
+  }
   last = performance.now();
   requestAnimationFrame(frame);
 });

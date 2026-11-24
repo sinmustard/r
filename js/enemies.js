@@ -700,8 +700,17 @@ function enemyFrame(e, d) {
   return 8 + (Math.floor(e.animT / a.idle) % 4);
 }
 
+function enemyDir(e) {
+  const c = Math.cos(e.angle);
+  const s = Math.sin(e.angle);
+  if (Math.abs(c) > Math.abs(s)) return c < 0 ? "-left" : "-right";
+  return s < 0 ? "-up" : "";
+}
+
 function drawSheetEnemy(e, d, img) {
   const i = enemyFrame(e, d);
+  const dirImg = d.dirs ? SPRITES["enemy-" + d.sheet + enemyDir(e)] : null;
+  if (dirImg) img = dirImg;
   const fw = img.naturalWidth / 4;
   const fh = img.naturalHeight / 3;
   const size = e.r * (d.drawScale || 4);
@@ -713,7 +722,7 @@ function drawSheetEnemy(e, d, img) {
   ctx.beginPath();
   ctx.ellipse(0, e.r * 0.6, e.r * 1.3, e.r * 0.45, 0, 0, Math.PI * 2);
   ctx.fill();
-  if (!d.upright) ctx.rotate(e.angle - Math.PI / 2);
+  if (!d.upright && !dirImg) ctx.rotate(e.angle - Math.PI / 2);
   if (e.flash > 0) ctx.filter = "brightness(2.2)";
   else if (e.windup > 0 && Math.floor(performance.now() / 90) % 2 === 0) ctx.filter = "sepia(1) saturate(5) hue-rotate(-25deg)";
   else if (e.vulnerable > 0 && Math.floor(performance.now() / 140) % 2 === 0) ctx.filter = "brightness(1.5)";
