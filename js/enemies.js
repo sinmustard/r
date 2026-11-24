@@ -673,10 +673,56 @@ function drawCursorEnemy(e, d) {
   ctx.restore();
 }
 
+function enemyFrame(e) {
+  const c = CONFIG.enemyAi[e.type === "glitch" ? "tow" : e.type] || {};
+  const a = CONFIG.enemyAnim;
+  const moved = Math.hypot(e.x - (e.lx === undefined ? e.x : e.lx), e.y - (e.ly === undefined ? e.y : e.ly)) > 0.3;
+  e.lx = e.x;
+  e.ly = e.y;
+  e.animT = (e.animT || 0) + 1 / 60;
+  if (e.ai === "wind" || e.ai === "aim") {
+    const total = c.wind || c.aimTime || 1;
+    return 4 + (e.aiT > total / 2 ? 0 : 1);
+  }
+  if (e.ai === "dash") return 6;
+  if (e.ai === "stuck" || e.ai === "reload" || (e.ai === "rest" && e.vulnerable > 0)) {
+    const total = c.stuck || c.reload || 1;
+    const since = total - e.aiT;
+    if (since < 0.2) return 6;
+    if (since < 0.6 || e.vulnerable > 0) return 7;
+  }
+  if (moved && !(e.stun > 0)) return Math.floor(e.animT / a.walk) % 4;
+  return 8 + (Math.floor(e.animT / a.idle) % 4);
+}
+
+function drawSheetEnemy(e, d, img) {
+  const i = enemyFrame(e);
+  const fw = img.naturalWidth / 4;
+  const fh = img.naturalHeight / 3;
+  const size = e.r * (d.drawScale || 4);
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  if (e.type === "glitch" && !(e.exposed > 0)) ctx.globalAlpha = 0.55;
+  if (e.windup > 0 || e.ai === "fuse") ctx.translate(rand(-1.5, 1.5), 0);
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.beginPath();
+  ctx.ellipse(0, e.r * 0.6, e.r * 1.3, e.r * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.rotate(e.angle - Math.PI / 2);
+  if (e.flash > 0) ctx.filter = "brightness(2.2)";
+  else if (e.windup > 0 && Math.floor(performance.now() / 90) % 2 === 0) ctx.filter = "sepia(1) saturate(5) hue-rotate(-25deg)";
+  else if (e.vulnerable > 0 && Math.floor(performance.now() / 140) % 2 === 0) ctx.filter = "brightness(1.5)";
+  ctx.drawImage(img, (i % 4) * fw, Math.floor(i / 4) * fh, fw, fh, -size / 2, -size / 2, size, size);
+  ctx.filter = "none";
+  ctx.restore();
+}
+
 function drawRobotEnemy(e) {
   const d = CONFIG.enemies[e.type];
   if (!d || !d.look) return false;
-  if (e.type === "cursor") drawCursorEnemy(e, d);
+  const sheet = d.sheet && SPRITES["enemy-" + d.sheet];
+  if (sheet) drawSheetEnemy(e, d, sheet);
+  else if (e.type === "cursor") drawCursorEnemy(e, d);
   else {
     ctx.save();
     ctx.translate(e.x, e.y);

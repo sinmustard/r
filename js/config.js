@@ -1,4 +1,4 @@
-const VERSION = "0.15";
+const VERSION = "0.15.1";
 
 const CONFIG = {
   width: 1280,
@@ -22,9 +22,9 @@ const CONFIG = {
   enemies: {
     drone: { name: "소형 드론", radius: 13, speed: 120, hp: 30, damage: 10, scrap: 1, color: "#e0525a", small: true },
     guard: { name: "경비 로봇", radius: 22, speed: 70, hp: 120, damage: 22, scrap: 3, color: "#b44ad8" },
-    tow: { name: "견인봇", radius: 14, speed: 110, hp: 45, damage: 10, scrap: 1, color: "#e8b931", small: true, look: true, legs: 4 },
-    blocker: { name: "차단봇", radius: 22, speed: 60, hp: 140, damage: 18, scrap: 3, color: "#c0392b", look: true, legs: 6 },
-    shooter: { name: "고철 투사봇", radius: 15, speed: 85, hp: 50, damage: 8, scrap: 2, color: "#9aa3ad", small: true, look: true, legs: 4 },
+    tow: { name: "견인봇", radius: 14, speed: 110, hp: 45, damage: 10, scrap: 1, color: "#e8b931", small: true, look: true, legs: 4, sheet: "hook-bot", drawScale: 4.4 },
+    blocker: { name: "차단봇", radius: 22, speed: 60, hp: 140, damage: 18, scrap: 3, color: "#c0392b", look: true, legs: 6, sheet: "shield-bot", drawScale: 3.6 },
+    shooter: { name: "고철 투사봇", radius: 15, speed: 85, hp: 50, damage: 8, scrap: 2, color: "#9aa3ad", small: true, look: true, legs: 4, sheet: "scrap-bot", drawScale: 4.4 },
     stamp: { name: "출근 도장 프레스", radius: 21, speed: 70, hp: 120, damage: 15, scrap: 3, color: "#8a5a2b", look: true, legs: 6 },
     ironcart: { name: "쇳덩이 운반봇", radius: 19, speed: 140, hp: 90, damage: 12, scrap: 3, color: "#ff7a1a", look: true, legs: 6 },
     rusher: { name: "급발진봇", radius: 17, speed: 95, hp: 75, damage: 12, scrap: 2, color: "#6fa8dc", look: true, legs: 4 },
@@ -38,6 +38,7 @@ const CONFIG = {
     boss: { name: "구역 관리 기체", radius: 40, speed: 55, hp: 1400, damage: 35, scrap: 25, color: "#c0392b" },
     clone: { name: "복제 프로그램", radius: 30, speed: 0, hp: 120, damage: 30, scrap: 0, color: "#ff3b6b" }
   },
+  enemyAnim: { walk: 0.12, idle: 0.25 },
   enemyAi: {
     buffMul: 1.35,
     tow: { range: 230, wind: 0.6, dash: 0.36, speed: 720, damage: 14, pull: 40, stuck: 1.3 },
