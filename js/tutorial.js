@@ -160,7 +160,7 @@ function drawGuide() {
   drawPrompt(last ? "스페이스나 클릭으로 연습 전투 시작" : "스페이스나 클릭으로 다음", 610);
   ctx.font = `14px ${FONT}`;
   ctx.fillStyle = "#6b717c";
-  ctx.fillText("← A 이전" + (guide.required ? "" : "  ·  Esc 시작 화면으로"), W / 2, 650);
+  ctx.fillText((guide.page > 0 ? "← A 이전  ·  " : "") + (last ? "D → 연습 전투" : "D → 다음") + (guide.required ? "" : "  ·  Esc 시작 화면으로"), W / 2, 650);
 }
 
 function tutorialEnemy(type, x, y, opts) {
