@@ -367,6 +367,7 @@ const ENEMY_AI = {
     e.dripT = (e.dripT || 0) - aiDt(e, dt);
     if (e.dripT <= 0) {
       e.dripT = c.every;
+      e.atkT = 0.2;
       if (game.hazards.filter(h => h.leak).length < c.max) {
         addHazard({ shape: "circle", x: e.x, y: e.y, r: c.radius, warn: 0.25, active: c.life, dps: c.dps, leak: true, color: "#7fd13b" });
       }
@@ -451,6 +452,7 @@ const ENEMY_AI = {
       e.windup = c.wind;
       addHazard({ shape: "rect", x: p.x, y: p.y, angle: 0, len: c.size, width: c.size, warn: c.wind, active: 0.15, damage: c.damage, owner: e, color: "#ff5fd2" });
     }
+    if (e.windup > 0 && e.windup - dt <= 0) e.atkT = 0.3;
     e.windup = Math.max(0, (e.windup || 0) - dt);
     return true;
   }
@@ -673,30 +675,33 @@ function drawCursorEnemy(e, d) {
   ctx.restore();
 }
 
-function enemyFrame(e) {
+function enemyFrame(e, d) {
   const c = CONFIG.enemyAi[e.type === "glitch" ? "tow" : e.type] || {};
   const a = CONFIG.enemyAnim;
   const moved = Math.hypot(e.x - (e.lx === undefined ? e.x : e.lx), e.y - (e.ly === undefined ? e.y : e.ly)) > 0.3;
   e.lx = e.x;
   e.ly = e.y;
   e.animT = (e.animT || 0) + 1 / 60;
-  if (e.ai === "wind" || e.ai === "aim") {
-    const total = c.wind || c.aimTime || 1;
-    return 4 + (e.aiT > total / 2 ? 0 : 1);
-  }
+  e.atkT = Math.max(0, (e.atkT || 0) - 1 / 60);
+  const wind = { wind: c.wind, aim: c.aimTime, spin: c.wind, brake: c.brake, fuse: c.fuse }[e.ai];
+  if (wind) return 4 + (e.aiT > wind / 2 ? 0 : 1);
+  if (e.type === "cursor" && e.windup > 0) return 4 + (e.windup > c.wind / 2 ? 0 : 1);
   if (e.ai === "dash") return 6;
-  if (e.ai === "stuck" || e.ai === "reload" || (e.ai === "rest" && e.vulnerable > 0)) {
-    const total = c.stuck || c.reload || 1;
-    const since = total - e.aiT;
-    if (since < 0.2) return 6;
+  if (e.ai === "roll") return 5;
+  const rec = { stuck: c.stuck, reload: c.reload, reel: c.reel, rest: e.vulnerable > 0 ? c.stuck : 0 }[e.ai];
+  if (rec) {
+    const since = rec - e.aiT;
+    if (since < 0.2 && !d.hitShown) return 6;
     if (since < 0.6 || e.vulnerable > 0) return 7;
   }
+  if (e.atkT > 0) return 6;
+  if (e.type === "relay" && e.links && e.links.length) return 4 + (Math.floor(e.animT / a.walk) % 4);
   if (moved && !(e.stun > 0)) return Math.floor(e.animT / a.walk) % 4;
   return 8 + (Math.floor(e.animT / a.idle) % 4);
 }
 
 function drawSheetEnemy(e, d, img) {
-  const i = enemyFrame(e);
+  const i = enemyFrame(e, d);
   const fw = img.naturalWidth / 4;
   const fh = img.naturalHeight / 3;
   const size = e.r * (d.drawScale || 4);
@@ -708,7 +713,7 @@ function drawSheetEnemy(e, d, img) {
   ctx.beginPath();
   ctx.ellipse(0, e.r * 0.6, e.r * 1.3, e.r * 0.45, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.rotate(e.angle - Math.PI / 2);
+  if (!d.upright) ctx.rotate(e.angle - Math.PI / 2);
   if (e.flash > 0) ctx.filter = "brightness(2.2)";
   else if (e.windup > 0 && Math.floor(performance.now() / 90) % 2 === 0) ctx.filter = "sepia(1) saturate(5) hue-rotate(-25deg)";
   else if (e.vulnerable > 0 && Math.floor(performance.now() / 140) % 2 === 0) ctx.filter = "brightness(1.5)";
@@ -717,11 +722,26 @@ function drawSheetEnemy(e, d, img) {
   ctx.restore();
 }
 
+function drawRelayLinks(e) {
+  if (!e.links) return;
+  ctx.strokeStyle = "rgba(127, 211, 255, " + (0.35 + 0.25 * Math.sin(game.time * 10)) + ")";
+  ctx.lineWidth = 1.5;
+  for (const o of e.links) {
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y);
+    ctx.lineTo(o.x, o.y);
+    ctx.stroke();
+  }
+}
+
 function drawRobotEnemy(e) {
   const d = CONFIG.enemies[e.type];
   if (!d || !d.look) return false;
   const sheet = d.sheet && SPRITES["enemy-" + d.sheet];
-  if (sheet) drawSheetEnemy(e, d, sheet);
+  if (sheet) {
+    drawSheetEnemy(e, d, sheet);
+    if (e.type === "relay") drawRelayLinks(e);
+  }
   else if (e.type === "cursor") drawCursorEnemy(e, d);
   else {
     ctx.save();
@@ -764,16 +784,7 @@ function drawRobotEnemy(e) {
     ctx.arc(e.r * 0.7, 0, Math.max(2.5, e.r * 0.18), 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-    if (e.type === "relay" && e.links) {
-      ctx.strokeStyle = "rgba(127, 211, 255, " + (0.35 + 0.25 * Math.sin(game.time * 10)) + ")";
-      ctx.lineWidth = 1.5;
-      for (const o of e.links) {
-        ctx.beginPath();
-        ctx.moveTo(e.x, e.y);
-        ctx.lineTo(o.x, o.y);
-        ctx.stroke();
-      }
-    }
+    if (e.type === "relay") drawRelayLinks(e);
   }
   if (e.windup > 0 || e.ai === "fuse") {
     ctx.fillStyle = "#ff4b4b";

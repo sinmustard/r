@@ -1,4 +1,4 @@
-const VERSION = "0.16";
+const VERSION = "0.16.1";
 
 const CONFIG = {
   width: 1280,
@@ -24,17 +24,17 @@ const CONFIG = {
     guard: { name: "경비 로봇", radius: 22, speed: 70, hp: 120, damage: 22, scrap: 3, color: "#b44ad8" },
     tow: { name: "견인봇", radius: 14, speed: 110, hp: 45, damage: 10, scrap: 1, color: "#e8b931", small: true, look: true, legs: 4, sheet: "hook-bot", drawScale: 4.4 },
     blocker: { name: "차단봇", radius: 22, speed: 60, hp: 140, damage: 18, scrap: 3, color: "#c0392b", look: true, legs: 6, sheet: "shield-bot", drawScale: 3.6 },
-    shooter: { name: "고철 투사봇", radius: 15, speed: 85, hp: 50, damage: 8, scrap: 2, color: "#9aa3ad", small: true, look: true, legs: 4, sheet: "scrap-bot", drawScale: 4.4 },
-    stamp: { name: "출근 도장 프레스", radius: 21, speed: 70, hp: 120, damage: 15, scrap: 3, color: "#8a5a2b", look: true, legs: 6 },
-    ironcart: { name: "쇳덩이 운반봇", radius: 19, speed: 140, hp: 90, damage: 12, scrap: 3, color: "#ff7a1a", look: true, legs: 6 },
-    rusher: { name: "급발진봇", radius: 17, speed: 95, hp: 75, damage: 12, scrap: 2, color: "#6fa8dc", look: true, legs: 4 },
-    tire: { name: "타이어 굴림봇", radius: 21, speed: 60, hp: 110, damage: 12, scrap: 3, color: "#3a3640", look: true, legs: 6 },
-    leak: { name: "누수 점검봇", radius: 15, speed: 80, hp: 60, damage: 8, scrap: 2, color: "#7fd13b", small: true, look: true, legs: 4 },
-    reactor: { name: "반응통봇", radius: 15, speed: 110, hp: 40, damage: 8, scrap: 2, color: "#5fbf3a", small: true, look: true, legs: 4 },
-    demolisher: { name: "철거봇", radius: 23, speed: 55, hp: 160, damage: 18, scrap: 4, color: "#e8b931", look: true, legs: 6 },
-    relay: { name: "명령 중계봇", radius: 15, speed: 70, hp: 70, damage: 6, scrap: 3, color: "#7fd3ff", small: true, look: true, legs: 4 },
-    glitch: { name: "오류 복제봇", radius: 14, speed: 115, hp: 55, damage: 10, scrap: 2, color: "#3ff0ff", small: true, look: true, legs: 4 },
-    cursor: { name: "삭제 커서", radius: 14, speed: 60, hp: 60, damage: 0, scrap: 2, color: "#ff5fd2", small: true, look: true },
+    shooter: { name: "고철 투사봇", radius: 15, speed: 85, hp: 50, damage: 8, scrap: 2, color: "#9aa3ad", small: true, look: true, legs: 4, sheet: "scrap-bot", drawScale: 4.4, hitShown: true },
+    stamp: { name: "출근 도장 프레스", radius: 21, speed: 70, hp: 120, damage: 15, scrap: 3, color: "#8a5a2b", look: true, legs: 6, sheet: "stamp-bot", drawScale: 3.8 },
+    ironcart: { name: "쇳덩이 운반봇", radius: 19, speed: 140, hp: 90, damage: 12, scrap: 3, color: "#ff7a1a", look: true, legs: 6, sheet: "ingot-bot", drawScale: 4.0, hitShown: true },
+    rusher: { name: "급발진봇", radius: 17, speed: 95, hp: 75, damage: 12, scrap: 2, color: "#6fa8dc", look: true, legs: 4, sheet: "dash-bot", drawScale: 4.2 },
+    tire: { name: "타이어 굴림봇", radius: 21, speed: 60, hp: 110, damage: 12, scrap: 3, color: "#3a3640", look: true, legs: 6, sheet: "tire-bot", drawScale: 3.8, hitShown: true },
+    leak: { name: "누수 점검봇", radius: 15, speed: 80, hp: 60, damage: 8, scrap: 2, color: "#7fd13b", small: true, look: true, legs: 4, sheet: "leak-bot", drawScale: 4.4 },
+    reactor: { name: "반응통봇", radius: 15, speed: 110, hp: 40, damage: 8, scrap: 2, color: "#5fbf3a", small: true, look: true, legs: 4, sheet: "barrel-bot", drawScale: 4.4 },
+    demolisher: { name: "철거봇", radius: 23, speed: 55, hp: 160, damage: 18, scrap: 4, color: "#e8b931", look: true, legs: 6, sheet: "demolition-bot", drawScale: 3.8, hitShown: true },
+    relay: { name: "명령 중계봇", radius: 15, speed: 70, hp: 70, damage: 6, scrap: 3, color: "#7fd3ff", small: true, look: true, legs: 4, sheet: "relay-bot", drawScale: 4.4 },
+    glitch: { name: "오류 복제봇", radius: 14, speed: 115, hp: 55, damage: 10, scrap: 2, color: "#3ff0ff", small: true, look: true, legs: 4, sheet: "glitch-bot", drawScale: 4.6 },
+    cursor: { name: "삭제 커서", radius: 14, speed: 60, hp: 60, damage: 0, scrap: 2, color: "#ff5fd2", small: true, look: true, sheet: "delete-cursor", drawScale: 4.4, upright: true },
     boss: { name: "구역 관리 기체", radius: 40, speed: 55, hp: 1400, damage: 35, scrap: 25, color: "#c0392b" },
     clone: { name: "복제 프로그램", radius: 30, speed: 0, hp: 120, damage: 30, scrap: 0, color: "#ff3b6b" }
   },
