@@ -51,7 +51,16 @@ function basePrice(type) {
 }
 
 function offerPrice(offer) {
-  return basePrice(offer.type) * (offer.kind === "dev" ? CONFIG.modules.devMul : 1);
+  const m = CONFIG.modules;
+  return Math.max(1, Math.round(basePrice(offer.type) * (offer.kind === "dev" ? m.devMul : m.recMul)));
+}
+
+function recWeight(o) {
+  const m = CONFIG.modules;
+  const installed = CARTRIDGES.reduce((n, c) => n + slotsOf(c.id).filter(Boolean).length, 0);
+  let w = (m.recWeight[o.type] || 1) * (m.recSkill[o.skill] || 1);
+  if (o.type === "special" && installed < m.earlyCount) w *= m.earlySpecial;
+  return w;
 }
 
 function box(b) {
@@ -86,7 +95,15 @@ function makeRecs() {
   while (out.length < 3 && pool.length) {
     const fresh = pool.filter(o => !out.some(x => x.skill === o.skill));
     const from = fresh.length ? fresh : pool;
-    const pick = from[Math.floor(Math.random() * from.length)];
+    let roll = Math.random() * from.reduce((n, o) => n + recWeight(o), 0);
+    let pick = from[from.length - 1];
+    for (const o of from) {
+      roll -= recWeight(o);
+      if (roll <= 0) {
+        pick = o;
+        break;
+      }
+    }
     out.push(pick);
     pool.splice(pool.indexOf(pick), 1);
   }
@@ -193,7 +210,7 @@ function describe() {
   } else if (t) {
     const problem = offerProblem(t);
     body = '<b class="mi-name">' + moduleName(t.skill, t.type) + '</b><span class="mi-kind">' + (t.type === "special" ? "전용 모듈" : "기본 모듈") + " · 대상 " + cartridgeOf(t.skill).name + "</span>" +
-      '<p class="mi-text">' + moduleText(t.skill, t.type) + '</p><p class="mi-price">가격 고철 <strong>' + offerPrice(t) + "</strong>개" + (t.kind === "dev" ? " (지정 개발 2배)" : "") + "</p>" +
+      '<p class="mi-text">' + moduleText(t.skill, t.type) + '</p><p class="mi-price">가격 고철 <strong>' + offerPrice(t) + "</strong>개" + (t.kind === "dev" ? " (지정 개발 · 기본가 " + basePrice(t.type) + "의 " + CONFIG.modules.devMul + "배)" : " (추천 할인 · 기본가 " + basePrice(t.type) + ")") + "</p>" +
       (problem ? '<p class="mi-bad">' + problem + "</p>" : '<p class="mi-ok">장착할 수 있어요</p>');
   }
   return '<div class="mi-head">' + cart.name + ' <span class="key">' + cart.key + "</span><small>장착 " + used + " / " + CONFIG.modules.slots + "</small></div>" + body;
@@ -219,7 +236,7 @@ function renderUpgrade() {
       '<img class="mt-icon" src="' + moduleIcon(o.skill, o.type) + '" alt="" draggable="false">' +
       '<b class="mt-name">' + moduleName(o.skill, o.type) + "</b>" +
       '<span class="mt-skill"><img src="assets/ui/skills/' + o.skill + '.png" alt="" draggable="false">' + cartridgeOf(o.skill).name + "</span>" +
-      '<span class="mt-price">고철 ' + offerPrice(o) + "</span></button>";
+      '<span class="mt-price">' + (o.kind === "rec" ? "<s>" + basePrice(o.type) + "</s> " : "") + "고철 " + offerPrice(o) + (o.kind === "rec" ? ' <em class="mt-sale">추천 할인</em>' : "") + "</span></button>";
   };
   const shown = offers.slice(first, first + 3);
   let cardsHtml = shown.length ? shown.map(card).join("") : '<div class="mt-empty" style="' + box(MAINT_BOX.empty) + '">추천할 모듈이 없어요</div>';
@@ -250,8 +267,8 @@ function renderUpgrade() {
     '<img class="mt-bg" src="assets/ui/maintenance.jpg" alt="" draggable="false">' +
     '<div class="mt-title" style="' + box(MAINT_BOX.title) + '"><b>모듈 정비</b><em class="mt-notice">' + maint.notice + '</em><span>고철 <strong>' + g.scrap + "</strong>개</span></div>" +
     '<div class="mt-tabs" style="' + box(MAINT_BOX.tabs) + '">' +
-    '<button type="button" class="mt-tab' + (maint.tab === "rec" ? " on" : "") + '" data-tab="rec">추천 모듈</button>' +
-    '<button type="button" class="mt-tab' + (maint.tab === "dev" ? " on" : "") + '" data-tab="dev">지정 개발 · 가격 2배</button></div>' +
+    '<button type="button" class="mt-tab' + (maint.tab === "rec" ? " on" : "") + '" data-tab="rec">추천 모듈 · 할인</button>' +
+    '<button type="button" class="mt-tab' + (maint.tab === "dev" ? " on" : "") + '" data-tab="dev">지정 개발 · 가격 ' + CONFIG.modules.devMul + '배</button></div>' +
     cardsHtml + board + slotsHtml +
     '<div class="mt-info" style="' + box(MAINT_BOX.info) + '">' + describe() + "</div>" +
     '<button type="button" class="mt-recycle' + (dragSlot ? " armed" : "") + '" data-recycle="1" style="' + box(MAINT_BOX.recycle) + '">' + recycleText + "</button>" +
