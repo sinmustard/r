@@ -483,3 +483,50 @@ upgradeEl.addEventListener("keydown", e => {
 window.addEventListener("resize", () => {
   if (state === "upgrade") renderUpgrade();
 });
+
+const sewer = document.createElement("div");
+sewer.className = "sewer";
+sewer.hidden = true;
+sewer.innerHTML = '<div class="sw-water"></div><b class="sw-bit"></b><b class="sw-bit"></b><b class="sw-bit"></b><div class="sw-scrap"><i></i><i></i><i></i></div>';
+document.body.appendChild(sewer);
+const sewerScrap = sewer.querySelector(".sw-scrap");
+let sewerDrag = null;
+
+function syncSewer() {
+  const el = upgradeEl;
+  const over = el.scrollHeight - el.clientHeight;
+  sewer.hidden = el.hidden || over <= 2;
+  if (sewer.hidden) return;
+  const track = sewer.clientHeight;
+  const h = sewerScrap.offsetHeight;
+  sewerScrap.style.top = (track - h) * (el.scrollTop / over) + "px";
+}
+
+function sewerScrollTo(clientY) {
+  const r = sewer.getBoundingClientRect();
+  const h = sewerScrap.offsetHeight;
+  const k = clamp((clientY - r.top - sewerDrag) / Math.max(1, r.height - h), 0, 1);
+  upgradeEl.scrollTop = k * (upgradeEl.scrollHeight - upgradeEl.clientHeight);
+}
+
+sewer.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  const sr = sewerScrap.getBoundingClientRect();
+  sewerDrag = e.target.closest(".sw-scrap") ? e.clientY - sr.top : sr.height / 2;
+  sewer.setPointerCapture(e.pointerId);
+  sewer.classList.add("drag");
+  sewerScrollTo(e.clientY);
+});
+sewer.addEventListener("pointermove", e => {
+  if (sewerDrag !== null) sewerScrollTo(e.clientY);
+});
+sewer.addEventListener("pointerup", () => {
+  sewerDrag = null;
+  sewer.classList.remove("drag");
+});
+sewer.addEventListener("wheel", e => {
+  upgradeEl.scrollTop += e.deltaY;
+}, { passive: true });
+upgradeEl.addEventListener("scroll", syncSewer);
+window.addEventListener("resize", syncSewer);
+new MutationObserver(syncSewer).observe(upgradeEl, { attributes: true, childList: true });
