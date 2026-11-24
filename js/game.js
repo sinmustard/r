@@ -590,6 +590,7 @@ function hitTarget(t, dmg) {
 }
 
 function damageEnemy(e, amount) {
+  if (e.transition) return;
   e.hp -= amount * (e.vulnerable > 0 ? CONFIG.boss.vulnerableMul : 1);
   e.flash = 0.08;
 }
@@ -597,6 +598,13 @@ function damageEnemy(e, amount) {
 function update(dt) {
   const g = game;
   g.time += dt;
+  if (g.boss && g.boss.transition) {
+    updateBossTransition(dt);
+    g.shake = Math.max(0, g.shake - dt * 20);
+    updateEffects(dt);
+    cleanup();
+    return;
+  }
   g.ejectCooldown = Math.max(0, g.ejectCooldown - dt);
   g.shake = Math.max(0, g.shake - dt * 20);
   g.banner = Math.max(0, g.banner - dt);
@@ -796,6 +804,7 @@ function updateEnemies(dt) {
   for (const e of g.enemies) {
     e.flash = Math.max(0, e.flash - dt);
     if (e.slowT > 0) e.slowT -= dt;
+    if (e.kind) trackBossMove(e, dt);
     if (e.held || e.thrown) continue;
     if (e.type === "boss" || e.type === "clone") {
       e.stun = 0;
@@ -1012,8 +1021,37 @@ function drawEnemies() {
   for (const e of game.enemies) if (!e.held && !e.thrown) drawEnemy(e);
 }
 
+function bossFrame(e) {
+  const k = e.kind;
+  const tr = e.transition;
+  if (tr && tr.frame >= 0 && SPRITES["trans-" + k]) return { img: SPRITES["trans-" + k], cols: 3, rows: 2, i: Math.min(5, tr.frame) };
+  const sheet = SPRITES[(e.phase > 0 ? "move2-" : "move-") + k];
+  if (!sheet) return null;
+  const row = e.moveT > 0 ? Math.floor(e.moveT / CONFIG.bossAnim.step) % 2 : 0;
+  return { img: sheet, cols: 4, rows: 2, i: row * 4 + (e.dir || 0) };
+}
+
+function trackBossMove(e, dt) {
+  const vx = e.x - (e.px === undefined ? e.x : e.px);
+  const vy = e.y - (e.py === undefined ? e.y : e.py);
+  e.px = e.x;
+  e.py = e.y;
+  const sp = Math.hypot(vx, vy) / Math.max(dt, 0.001);
+  let ax = vx;
+  let ay = vy;
+  if (sp > CONFIG.bossAnim.minSpeed) e.moveT = (e.moveT || 0) + dt;
+  else {
+    e.moveT = 0;
+    ax = game.player.x - e.x;
+    ay = game.player.y - e.y;
+  }
+  if (e.transition) e.dir = 0;
+  else e.dir = Math.abs(ax) > Math.abs(ay) ? (ax < 0 ? 1 : 2) : ay < 0 ? 3 : 0;
+}
+
 function drawBossSprite(e) {
   const img = SPRITES[e.sprite];
+  const fr = bossFrame(e);
   const size = e.r * CONFIG.bossDrawScale;
   ctx.save();
   ctx.translate(e.x, e.y);
@@ -1030,14 +1068,18 @@ function drawBossSprite(e) {
   if (e.flash > 0) ctx.filter = "brightness(2.2)";
   else if (e.vulnerable > 0 && Math.floor(performance.now() / 120) % 2 === 0) ctx.filter = "brightness(1.6) saturate(0.6)";
   else if (e.windup > 0 && Math.floor(performance.now() / 80) % 2 === 0) ctx.filter = "sepia(1) saturate(5) hue-rotate(-25deg)";
-  ctx.drawImage(img, -size / 2 + shake, -size / 2, size, size);
+  if (fr) {
+    const fw = fr.img.naturalWidth / fr.cols;
+    const fh = fr.img.naturalHeight / fr.rows;
+    ctx.drawImage(fr.img, (fr.i % fr.cols) * fw, Math.floor(fr.i / fr.cols) * fh, fw, fh, -size / 2 + shake, -size / 2, size, size);
+  } else ctx.drawImage(img, -size / 2 + shake, -size / 2, size, size);
   ctx.filter = "none";
   ctx.shadowBlur = 0;
   ctx.restore();
 }
 
 function drawEnemy(e) {
-  if ((e.type === "boss" || e.type === "clone") && e.sprite && SPRITES[e.sprite]) {
+  if ((e.type === "boss" || e.type === "clone") && e.sprite && (SPRITES[e.sprite] || bossFrame(e))) {
     drawBossSprite(e);
     return;
   }
@@ -1612,6 +1654,13 @@ function draw() {
   }
   ctx.save();
   if (state === "play" && g.shake > 0) ctx.translate(rand(-1, 1) * g.shake, rand(-1, 1) * g.shake);
+  const zoom = g.boss && g.boss.transition ? g.boss.transition.zoom : 1;
+  if (zoom > 1) {
+    const b = g.boss;
+    ctx.translate(b.x, b.y);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-b.x, -b.y);
+  }
   drawFloor();
   drawPuddles();
   drawMines();
@@ -1656,6 +1705,9 @@ Promise.all([
   loadSprite("legRight", "assets/mech-leg-right.png"),
   ...CONFIG.bosses.map(b => loadSprite("boss-" + b.sprite, "assets/bosses/game/" + b.sprite + ".png"))
 ]).then(() => {
+  for (const b of CONFIG.bosses) {
+    for (const [key, dir] of [["move-", "move/"], ["move2-", "move2/"], ["trans-", "transition/"]]) loadSprite(key + b.sprite, "assets/bosses/game/" + dir + b.sprite + ".png").catch(() => {});
+  }
   last = performance.now();
   requestAnimationFrame(frame);
 });

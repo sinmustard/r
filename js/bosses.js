@@ -473,7 +473,7 @@ BOSS_DEFS.executioner = {
 function spawnClone(b, x, y) {
   const d = CONFIG.enemies.clone;
   const hp = d.hp * (1 + (game.zone - 1) * 0.3);
-  const c = { type: "clone", sprite: b.sprite, alpha: 0.5, x, y, r: d.radius, hp, maxHp: hp, speed: 0, damage: d.damage, attackTimer: 0, flash: 0, angle: 0, life: 4.2 };
+  const c = { type: "clone", sprite: b.sprite, kind: b.kind, phase: b.phase, alpha: 0.5, x, y, r: d.radius, hp, maxHp: hp, speed: 0, damage: d.damage, attackTimer: 0, flash: 0, angle: 0, life: 4.2 };
   game.enemies.push(c);
   burst(x, y, "#ff3b6b", 14, 180);
   return c;
@@ -595,6 +595,79 @@ function pickPattern(b, def) {
   return name;
 }
 
+function phaseShift(b, def) {
+  showBanner(b.name + " · " + (b.phase + 1) + "페이즈");
+  burst(b.x, b.y, "#ff4b4b", 30, 260);
+  game.shake = Math.min(12, game.shake + 8);
+  if (def.onPhase) def.onPhase(b);
+}
+
+function startBossTransition(b) {
+  const g = game;
+  g.hazards = [];
+  g.bossShots = [];
+  g.beam = null;
+  if (g.held && g.held !== b) {
+    g.held.held = false;
+    g.held = null;
+  }
+  b.transition = { t: 0, frame: -1, zoom: 1, fromX: b.x, fromY: b.y };
+}
+
+function updateBossTransition(dt) {
+  const g = game;
+  const b = g.boss;
+  const a = CONFIG.bossAnim;
+  const tr = b.transition;
+  tr.t += dt;
+  const play = a.frameTime * 6;
+  const tx = W / 2;
+  const ty = H / 2 - 40;
+  if (tr.t < a.moveTime) {
+    const k = tr.t / a.moveTime;
+    const e = k * k * (3 - 2 * k);
+    b.x = tr.fromX + (tx - tr.fromX) * e;
+    b.y = tr.fromY + (ty - tr.fromY) * e;
+    tr.zoom = 1 + (a.zoom - 1) * e;
+    b.moveT = (b.moveT || 0) + dt;
+    const p = g.player;
+    const need = b.r + p.r + 70;
+    const d = Math.hypot(p.x - tx, p.y - ty);
+    if (d < need) {
+      const ang = d > 1 ? Math.atan2(p.y - ty, p.x - tx) : Math.PI / 2;
+      p.x = clamp(p.x + Math.cos(ang) * Math.min(need - d, 400 * dt), p.r, W - p.r);
+      p.y = clamp(p.y + Math.sin(ang) * Math.min(need - d, 400 * dt), p.r, H - p.r);
+    }
+    b.dir = 0;
+    return;
+  }
+  b.x = tx;
+  b.y = ty;
+  b.px = tx;
+  b.py = ty;
+  b.moveT = 0;
+  b.dir = 0;
+  const pt = tr.t - a.moveTime;
+  if (pt < play) {
+    const f = Math.floor(pt / a.frameTime);
+    if (f !== tr.frame) {
+      tr.frame = f;
+      g.shake = Math.min(10, g.shake + 3);
+      burst(b.x, b.y, "#ff4b4b", 10, 200);
+    }
+    tr.zoom = a.zoom;
+    return;
+  }
+  tr.frame = 6;
+  const back = pt - play;
+  if (back < a.holdTime) {
+    tr.zoom = a.zoom - (a.zoom - 1) * (back / a.holdTime);
+    return;
+  }
+  b.transition = null;
+  phaseShift(b, bossDef(b));
+}
+
 function updateBoss(dt) {
   const g = game;
   const b = g.boss;
@@ -629,10 +702,11 @@ function updateBoss(dt) {
     b.queue = [];
     b.idle = 1.2;
     b.windup = 0;
-    showBanner(b.name + " · " + (b.phase + 1) + "페이즈");
-    burst(b.x, b.y, "#ff4b4b", 30, 260);
-    g.shake = Math.min(12, g.shake + 8);
-    if (def.onPhase) def.onPhase(b);
+    if (b.phase === 1 && SPRITES["trans-" + b.kind]) {
+      startBossTransition(b);
+      return;
+    }
+    phaseShift(b, def);
   }
   if (def.update) def.update(b, dt);
   if (b.act2 && stepAct(b.act2, dt, b, p)) b.act2 = null;

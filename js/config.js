@@ -1,4 +1,4 @@
-const VERSION = "0.13";
+const VERSION = "0.14";
 
 const CONFIG = {
   width: 1280,
@@ -35,6 +35,7 @@ const CONFIG = {
     { name: "중앙 AI", sprite: "central-ai", radius: 44 }
   ],
   bossDrawScale: 3.3,
+  bossAnim: { step: 0.18, minSpeed: 15, moveTime: 0.6, frameTime: 0.15, holdTime: 0.3, zoom: 1.35 },
   boss: { hpPerZone: 0.5, contactDamage: 30, vulnerableMul: 1.5, enterY: 150, objectLife: 20 },
   events: { repairCost: 8, repairHp: 120, pileBig: 12, pileHurt: 20, pileSmall: 6, crateScrap: 8, crateHp: 60 },
   scrap: { radius: 7, life: 25 }
