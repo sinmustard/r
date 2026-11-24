@@ -1135,8 +1135,8 @@ function drawEnemies() {
 function bossFrame(e) {
   const k = e.kind;
   const tr = e.transition;
-  if (tr && tr.frame >= 0 && SPRITES["trans-" + k]) return { img: SPRITES["trans-" + k], cols: 3, rows: 2, i: Math.min(5, tr.frame) };
-  const sheet = SPRITES[(e.phase > 0 ? "move2-" : "move-") + k];
+  if (tr && tr.frame >= 0 && SPRITES[tr.sheet + k]) return { img: SPRITES[tr.sheet + k], cols: 3, rows: 2, i: Math.min(5, tr.frame) };
+  const sheet = (e.phase > 1 && SPRITES["move3-" + k]) || SPRITES[(e.phase > 0 ? "move2-" : "move-") + k];
   if (!sheet) return null;
   const row = e.moveT > 0 ? Math.floor(e.moveT / CONFIG.bossAnim.step) % 2 : 0;
   return { img: sheet, cols: 4, rows: 2, i: row * 4 + (e.dir || 0) };
@@ -1845,7 +1845,9 @@ Promise.all([
   ...CONFIG.bosses.map(b => loadSprite("boss-" + b.sprite, "assets/bosses/game/" + b.sprite + ".png"))
 ]).then(() => {
   for (const b of CONFIG.bosses) {
-    for (const [key, dir] of [["move-", "move/"], ["move2-", "move2/"], ["trans-", "transition/"]]) loadSprite(key + b.sprite, "assets/bosses/game/" + dir + b.sprite + ".png").catch(() => {});
+    const sets = [["move-", "move/"], ["move2-", "move2/"], ["trans-", "transition/"]];
+    if (b.phase3) sets.push(["move3-", "move3/"], ["trans3-", "transition3/"]);
+    for (const [key, dir] of sets) loadSprite(key + b.sprite, "assets/bosses/game/" + dir + b.sprite + ".png").catch(() => {});
   }
   for (const d of Object.values(CONFIG.enemies)) {
     if (!d.sheet) continue;

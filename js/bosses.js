@@ -607,7 +607,7 @@ function phaseShift(b, def) {
   if (def.onPhase) def.onPhase(b);
 }
 
-function startBossTransition(b) {
+function startBossTransition(b, sheet) {
   const g = game;
   g.hazards = [];
   g.bossShots = [];
@@ -616,7 +616,12 @@ function startBossTransition(b) {
     g.held.held = false;
     g.held = null;
   }
-  b.transition = { t: 0, frame: -1, zoom: 1, fromX: b.x, fromY: b.y };
+  for (const c of g.enemies) {
+    if (c.type !== "clone") continue;
+    c.dead = true;
+    c.noReward = true;
+  }
+  b.transition = { t: 0, frame: -1, zoom: 1, fromX: b.x, fromY: b.y, sheet };
 }
 
 function updateBossTransition(dt) {
@@ -705,8 +710,9 @@ function updateBoss(dt) {
     b.queue = [];
     b.idle = 1.2;
     b.windup = 0;
-    if (b.phase === 1 && SPRITES["trans-" + b.kind]) {
-      startBossTransition(b);
+    const trKey = b.phase === 1 ? "trans-" : b.phase === 2 ? "trans3-" : "";
+    if (trKey && SPRITES[trKey + b.kind]) {
+      startBossTransition(b, trKey);
       return;
     }
     phaseShift(b, def);

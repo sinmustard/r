@@ -1,4 +1,4 @@
-const VERSION = "0.18.1";
+const VERSION = "0.18.2";
 
 const CONFIG = {
   width: 1280,
@@ -74,7 +74,7 @@ const CONFIG = {
     { name: "자동차공장", sprite: "auto-factory", radius: 48 },
     { name: "화학공장", sprite: "chemical-factory", radius: 46 },
     { name: "집행자", sprite: "executioner", radius: 50 },
-    { name: "중앙 AI", sprite: "central-ai", radius: 44 }
+    { name: "중앙 AI", sprite: "central-ai", radius: 44, phase3: true }
   ],
   bossDrawScale: 3.3,
   bossAnim: { step: 0.18, minSpeed: 15, moveTime: 0.6, frameTime: 0.15, holdTime: 0.3, zoom: 1.35 },
