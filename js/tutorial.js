@@ -78,19 +78,17 @@ function drawGuideArt(kind) {
     drawPlayer(m, 2.6);
   } else if (kind === "route") {
     const nodes = [["전투", "#e05252"], ["정예", "#b44ad8"], ["정비", "#e8b931"], ["사건", "#4fa3e0"], ["보스", "#ff6b4b"]];
+    const pos = nodes.map((n, i) => ({ x: 800 + (i % 3) * 120, y: 230 + Math.floor(i / 3) * 140 + (i % 2) * 20 }));
+    ctx.strokeStyle = "#3a3f4a";
+    ctx.lineWidth = 3;
+    for (let i = 1; i < pos.length; i++) {
+      ctx.beginPath();
+      ctx.moveTo(pos[i - 1].x, pos[i - 1].y);
+      ctx.lineTo(pos[i].x, pos[i].y);
+      ctx.stroke();
+    }
     nodes.forEach(([label, color], i) => {
-      const x = 800 + (i % 3) * 120;
-      const y = 230 + Math.floor(i / 3) * 140 + (i % 2) * 20;
-      if (i > 0) {
-        const px = 800 + ((i - 1) % 3) * 120;
-        const py = 230 + Math.floor((i - 1) / 3) * 140 + ((i - 1) % 2) * 20;
-        ctx.strokeStyle = "#3a3f4a";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-      }
+      const { x, y } = pos[i];
       ctx.fillStyle = "#171a20";
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
