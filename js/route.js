@@ -165,13 +165,15 @@ function startBattle(t) {
     const b = spawnEnemy("boss");
     b.r = info.radius;
     b.sprite = "boss-" + info.sprite;
+    b.kind = info.sprite;
     b.name = info.name;
     b.x = W / 2;
     b.y = -b.r;
-    b.summon = CONFIG.boss.summonEvery;
-    b.chargeCd = CONFIG.boss.chargeEvery;
+    b.phase = 0;
+    b.idle = 1;
     b.windup = 0;
-    b.charge = null;
+    b.act = null;
+    b.queue = [];
     g.boss = b;
     showBanner("보스 등장 · " + info.name);
   } else {
@@ -216,64 +218,6 @@ function updateBattle(dt) {
   }
 }
 
-function updateBoss(dt) {
-  const g = game;
-  const b = g.boss;
-  const k = CONFIG.boss;
-  const p = g.player;
-  if (!b || b.dead) return;
-  b.summon -= dt;
-  if (b.summon <= 0) {
-    b.summon = k.summonEvery;
-    for (let i = 0; i < k.summonCount; i++) {
-      const a = (i / k.summonCount) * Math.PI * 2 + Math.random();
-      const e = spawnEnemy("drone");
-      e.x = clamp(b.x + Math.cos(a) * (b.r + 24), e.r, W - e.r);
-      e.y = clamp(b.y + Math.sin(a) * (b.r + 24), e.r, H - e.r);
-    }
-    burst(b.x, b.y, "#e0525a", 16, 200);
-  }
-  if (b.charge) {
-    b.x = clamp(b.x + b.charge.vx * dt, b.r, W - b.r);
-    b.y = clamp(b.y + b.charge.vy * dt, b.r, H - b.r);
-    b.charge.t -= dt;
-    if (!b.charge.hit && dist(b, p) < b.r + p.r) {
-      b.charge.hit = true;
-      hitTarget(p, k.chargeDamage);
-      g.shake = Math.min(12, g.shake + 8);
-    }
-    if (b.charge.t <= 0) b.charge = null;
-    return;
-  }
-  if (b.windup > 0) {
-    b.windup -= dt;
-    b.angle = Math.atan2(p.y - b.y, p.x - b.x);
-    if (b.windup <= 0) b.charge = { vx: Math.cos(b.angle) * k.chargeSpeed, vy: Math.sin(b.angle) * k.chargeSpeed, t: k.chargeTime, hit: false };
-    return;
-  }
-  b.chargeCd -= dt;
-  if (b.chargeCd <= 0 && b.y > b.r && dist(b, p) < k.chargeRange) {
-    b.chargeCd = k.chargeEvery;
-    b.windup = k.chargeWindup;
-  }
-}
-
-function drawBossTelegraph() {
-  const b = game.boss;
-  if (!b || b.dead || !(b.windup > 0)) return;
-  const len = CONFIG.boss.chargeSpeed * CONFIG.boss.chargeTime;
-  ctx.globalAlpha = 0.25 + 0.25 * Math.sin(performance.now() / 50);
-  ctx.strokeStyle = "#ff4b4b";
-  ctx.lineWidth = b.r * 2;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(b.x, b.y);
-  ctx.lineTo(b.x + Math.cos(b.angle) * len, b.y + Math.sin(b.angle) * len);
-  ctx.stroke();
-  ctx.lineCap = "butt";
-  ctx.globalAlpha = 1;
-}
-
 function drawBossBar() {
   const b = game.boss;
   if (!b || b.dead) return;
@@ -283,8 +227,13 @@ function drawBossBar() {
   ctx.fillRect(x - 2, 82, w + 4, 18);
   ctx.fillStyle = "#3a1414";
   ctx.fillRect(x, 84, w, 14);
-  ctx.fillStyle = "#ff6b3c";
+  ctx.fillStyle = b.vulnerable > 0 ? "#ffe27a" : "#ff6b3c";
   ctx.fillRect(x, 84, w * clamp(b.hp / b.maxHp, 0, 1), 14);
+  const def = bossDef(b);
+  if (def) {
+    ctx.fillStyle = "#171a20";
+    for (const t of def.phases) ctx.fillRect(x + w * t - 1, 82, 3, 18);
+  }
   ctx.fillStyle = "#ffffff";
   ctx.font = `bold 13px ${FONT}`;
   ctx.textAlign = "center";

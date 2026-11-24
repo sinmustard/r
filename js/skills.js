@@ -150,6 +150,14 @@ function updateSkills(dt) {
   for (const c of g.cubes) {
     c.flash = Math.max(0, c.flash - dt);
     if (c.held || c.thrown || c.dead) continue;
+    if (c.hot > 0) {
+      c.hot -= dt;
+      c.burnCd = (c.burnCd || 0) - dt;
+      if (c.burnCd <= 0 && dist(c, g.player) < c.r + g.player.r) {
+        c.burnCd = 0.5;
+        hitTarget(g.player, 6);
+      }
+    }
     c.life -= dt;
     if (c.life <= 0) {
       c.dead = true;
@@ -191,7 +199,33 @@ function drawCube(c) {
   ctx.translate(c.x, c.y);
   ctx.rotate(c.angle);
   const s = c.r * 1.7;
-  ctx.fillStyle = c.flash > 0 ? "#ffffff" : "#8d939c";
+  if (c.look === "car") {
+    ctx.fillStyle = "#3a3640";
+    for (const [x, y] of [[-14, -15], [8, -15], [-14, 11], [8, 11]]) ctx.fillRect(x, y, 8, 4);
+    ctx.fillStyle = c.flash > 0 ? "#ffffff" : "#8a929c";
+    ctx.fillRect(-20, -12, 40, 24);
+    ctx.fillStyle = "#6f7680";
+    ctx.fillRect(-16, -8, 10, 16);
+    ctx.strokeStyle = "#1e1c21";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-20, -12, 40, 24);
+    ctx.restore();
+    return;
+  }
+  if (c.look === "barrel") {
+    ctx.fillStyle = c.flash > 0 ? "#ffffff" : "#5fbf3a";
+    ctx.beginPath();
+    ctx.arc(0, 0, c.r * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#1e1c21";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#e8b931";
+    ctx.fillRect(-c.r * 0.8, -2, c.r * 1.6, 4);
+    ctx.restore();
+    return;
+  }
+  ctx.fillStyle = c.flash > 0 ? "#ffffff" : c.hot > 0 ? "#ff7a1a" : c.look === "block" ? "#6b717c" : "#8d939c";
   ctx.fillRect(-s / 2, -s / 2, s, s);
   ctx.fillStyle = "#6b717c";
   ctx.fillRect(-s / 2 + 4, -s / 2 + 4, s / 2 - 4, s / 2 - 4);

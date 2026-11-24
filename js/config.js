@@ -1,4 +1,4 @@
-const VERSION = "0.9";
+const VERSION = "0.10";
 
 const CONFIG = {
   width: 1280,
@@ -34,7 +34,7 @@ const CONFIG = {
     { name: "중앙 AI", sprite: "central-ai", radius: 44 }
   ],
   bossDrawScale: 3.3,
-  boss: { hpPerZone: 0.5, summonEvery: 6, summonCount: 4, chargeEvery: 4.5, chargeWindup: 0.7, chargeSpeed: 420, chargeTime: 0.55, chargeRange: 520, chargeDamage: 45 },
+  boss: { hpPerZone: 0.5, contactDamage: 30, vulnerableMul: 1.5, enterY: 150, objectLife: 20 },
   events: { repairCost: 8, repairHp: 120, pileBig: 12, pileHurt: 20, pileSmall: 6, crateScrap: 8, crateHp: 60 },
   scrap: { radius: 7, life: 25 }
 };

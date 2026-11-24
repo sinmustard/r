@@ -141,6 +141,8 @@ function newGame() {
     overclockCooldown: 0,
     cartridges: newCartridges(),
     puddles: [],
+    hazards: [],
+    bossShots: [],
     puddleTimer: 0,
     eDownAt: null,
     refillWait: 0,
@@ -445,7 +447,7 @@ function clawTarget() {
   let target = null;
   let best = k.pickRange;
   for (const e of g.enemies.concat(g.cubes)) {
-    if (e.dead || e.thrown || e.held || e.type === "boss" || dist(e, p) > reach) continue;
+    if (e.dead || e.thrown || e.held || e.hot > 0 || e.type === "boss" || e.type === "clone" || dist(e, p) > reach) continue;
     const d = Math.hypot(e.x - mouse.x, e.y - mouse.y);
     if (d < best) {
       best = d;
@@ -550,7 +552,7 @@ function hitTarget(t, dmg) {
 }
 
 function damageEnemy(e, amount) {
-  e.hp -= amount;
+  e.hp -= amount * (e.vulnerable > 0 ? CONFIG.boss.vulnerableMul : 1);
   e.flash = 0.08;
 }
 
@@ -754,9 +756,9 @@ function updateEnemies(dt) {
   for (const e of g.enemies) {
     e.flash = Math.max(0, e.flash - dt);
     if (e.held || e.thrown) continue;
-    if (e.type === "boss") {
+    if (e.type === "boss" || e.type === "clone") {
       e.stun = 0;
-      if (e.windup > 0 || e.charge) continue;
+      continue;
     }
     if (e.stun > 0) {
       e.stun -= dt;
@@ -978,15 +980,22 @@ function drawBossSprite(e) {
   ctx.ellipse(0, size * 0.38, size * 0.42, size * 0.12, 0, 0, Math.PI * 2);
   ctx.fill();
   const shake = e.windup > 0 ? rand(-2, 2) : 0;
+  if (e.phase > 0) {
+    ctx.shadowColor = "rgba(255,60,40,0.9)";
+    ctx.shadowBlur = 16 + Math.sin(performance.now() / 120) * 6;
+  }
+  if (e.alpha) ctx.globalAlpha = e.alpha;
   if (e.flash > 0) ctx.filter = "brightness(2.2)";
+  else if (e.vulnerable > 0 && Math.floor(performance.now() / 120) % 2 === 0) ctx.filter = "brightness(1.6) saturate(0.6)";
   else if (e.windup > 0 && Math.floor(performance.now() / 80) % 2 === 0) ctx.filter = "sepia(1) saturate(5) hue-rotate(-25deg)";
   ctx.drawImage(img, -size / 2 + shake, -size / 2, size, size);
   ctx.filter = "none";
+  ctx.shadowBlur = 0;
   ctx.restore();
 }
 
 function drawEnemy(e) {
-  if (e.type === "boss" && e.sprite && SPRITES[e.sprite]) {
+  if ((e.type === "boss" || e.type === "clone") && e.sprite && SPRITES[e.sprite]) {
     drawBossSprite(e);
     return;
   }
