@@ -187,6 +187,14 @@ function startBattle(t) {
 
 function finishBattle() {
   const g = game;
+  if (g.node === "boss" && g.zone >= CONFIG.bosses.length) {
+    g.node = null;
+    g.won = true;
+    addClear();
+    state = "over";
+    overAt = performance.now();
+    return;
+  }
   if (g.node === "boss") {
     g.zone++;
     g.step = 0;

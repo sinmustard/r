@@ -1,4 +1,4 @@
-const VERSION = "0.15.1";
+const VERSION = "0.16";
 
 const CONFIG = {
   width: 1280,

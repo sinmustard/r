@@ -182,6 +182,24 @@ function startGame() {
   openRoute();
 }
 
+function clearCount() {
+  try {
+    return Number(localStorage.getItem("factory-clears")) || 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function addClear() {
+  const n = clearCount() + 1;
+  try {
+    localStorage.setItem("factory-clears", String(n));
+  } catch (e) {
+    return n;
+  }
+  return n;
+}
+
 function canRestart() {
   return state === "over" && performance.now() - overAt > 800;
 }
@@ -1630,17 +1648,26 @@ function drawTitle() {
   ctx.fillText(hint, 124, H - 40);
   ctx.textAlign = "right";
   ctx.fillText("v" + VERSION, W - 24, H - 40);
+  const clears = clearCount();
+  if (clears > 0) {
+    ctx.fillStyle = "#e8b931";
+    ctx.font = `bold 15px ${FONT}`;
+    ctx.fillText("누적 클리어 " + clears + "회", W - 24, H - 64);
+  }
 }
 
 function drawGameOver() {
   const g = game;
   drawOverlay();
-  ctx.fillStyle = "#ff6b6b";
+  ctx.fillStyle = g.won ? "#e8b931" : "#ff6b6b";
   ctx.font = `900 72px ${FONT}`;
-  ctx.fillText("공장 정지", W / 2, 250);
+  ctx.fillText(g.won ? "중앙 AI 격파!" : "공장 정지", W / 2, 250);
   ctx.fillStyle = "#d7dce3";
   ctx.font = `20px ${FONT}`;
-  ctx.fillText("구역 " + g.zone + " · " + Math.max(1, g.step) + "번째 칸  ·  처치 " + g.kills + "  ·  고철 " + g.scrap, W / 2, 330);
+  ctx.fillText(g.won ? "모든 구역 돌파  ·  처치 " + g.kills + "  ·  고철 " + g.scrap : "구역 " + g.zone + " · " + Math.max(1, g.step) + "번째 칸  ·  처치 " + g.kills + "  ·  고철 " + g.scrap, W / 2, 330);
+  ctx.fillStyle = "#e8b931";
+  ctx.font = `bold 18px ${FONT}`;
+  ctx.fillText("누적 클리어 " + clearCount() + "회", W / 2, 370);
   if (canRestart()) {
     drawPrompt("클릭하거나 스페이스를 눌러 다시 시작", 430);
     ctx.font = `15px ${FONT}`;
